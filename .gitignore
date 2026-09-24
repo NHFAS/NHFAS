@@ -1,0 +1,51 @@
+# Dependencies
+node_modules/
+
+# Production and Vite build output
+dist/
+dist-ssr/
+coverage/
+.vite/
+
+# Local environment files and secrets
+.env
+.env.*
+!.env.example
+!.env.template
+
+# Logs and debug output
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Package-manager and tool caches
+.npm/
+.eslintcache
+.stylelintcache
+.cache/
+.parcel-cache/
+
+# Local editor and operating-system files
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.example.json
+.idea/
+.DS_Store
+Thumbs.db
+*.suo
+*.user
+*.userossc
+*.sln
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
