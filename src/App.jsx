@@ -11,6 +11,7 @@ import DashboardLayout from './layout/DashboardLayout';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
 import SignUp from './pages/SignUp';
+import FindMe from './pages/FindMe';
 
 function App() {
   const [loading, setLoading] = useState(true);
@@ -90,6 +91,7 @@ function App() {
           <Route path="services" element={<PlaceholderPage title="Services" />} />
           <Route path="earnings" element={<PlaceholderPage title="Earnings" />} />
           <Route path="reviews" element={<PlaceholderPage title="Reviews" />} />
+          <Route path="find-me" element={<FindMe />} />
           <Route path="settings" element={<PlaceholderPage title="Settings" />} />
         </Route>
         <Route path="*" element={<NotFound />} />

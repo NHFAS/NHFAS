@@ -8,7 +8,8 @@ import {
   DollarSign, 
   Star, 
   Settings,
-  Repeat
+  Repeat,
+  MapPin
 } from 'lucide-react';
 import logo from '../../assets/logo.png';
 
@@ -22,6 +23,7 @@ const Sidebar = () => {
     { name: 'Services', href: '/dashboard/services', icon: Briefcase },
     { name: 'Earnings', href: '/dashboard/earnings', icon: DollarSign },
     { name: 'Reviews', href: '/dashboard/reviews', icon: Star },
+    { name: 'Find Me', href: '/dashboard/find-me', icon: MapPin },
     { name: 'Settings', href: '/dashboard/settings', icon: Settings },
   ];
 
