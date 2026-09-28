@@ -28,7 +28,10 @@ const SignUp = () => {
       email: formData.email,
       password: formData.password,
       options: {
-        data: { full_name: formData.name },
+        data: {
+          full_name: formData.name,
+          role: accountType === 'provider' ? 'service_provider' : 'client',
+        },
       },
     });
 
