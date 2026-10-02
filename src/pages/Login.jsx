@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, ArrowRight, Home } from 'lucide-react';
 import logo from '../assets/logo.png';
@@ -12,12 +12,58 @@ const Login = () => {
     password: '',
   });
   const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isResending, setIsResending] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
+  const [needsConfirmation, setNeedsConfirmation] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('confirmed') === '1') setMessage('Email confirmed. You can sign in now.');
+    if (params.get('reset') === '1') setIsPasswordRecovery(true);
+  }, []);
+
+  const resendConfirmation = async () => {
+    setIsResending(true);
+    setError('');
+    const { error: resendError } = await supabase.auth.resend({
+      type: 'signup',
+      email: formData.email,
+      options: { emailRedirectTo: `${window.location.origin}/login?confirmed=1` },
+    });
+    if (resendError) setError(resendError.message);
+    else setMessage(`A new confirmation email was requested for ${formData.email}. Check your spam folder too.`);
+    setIsResending(false);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setMessage('');
     setIsSubmitting(true);
+
+    if (isPasswordRecovery) {
+      const { error: updateError } = await supabase.auth.updateUser({ password: formData.password });
+      if (updateError) {
+        setError(updateError.message);
+        setIsSubmitting(false);
+        return;
+      }
+      navigate('/dashboard');
+      return;
+    }
+
+    if (isResetting) {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(formData.email, {
+        redirectTo: `${window.location.origin}/login?reset=1`,
+      });
+      if (resetError) setError(resetError.message);
+      else setMessage(`If an account exists for ${formData.email}, a password reset link has been requested.`);
+      setIsSubmitting(false);
+      return;
+    }
 
     const { error: signInError } = await supabase.auth.signInWithPassword({
       email: formData.email,
@@ -26,6 +72,7 @@ const Login = () => {
 
     if (signInError) {
       setError(signInError.message);
+      setNeedsConfirmation(signInError.code === 'email_not_confirmed' || signInError.message.toLowerCase().includes('email not confirmed'));
       setIsSubmitting(false);
       return;
     }
@@ -49,31 +96,32 @@ const Login = () => {
               <span className="font-extrabold text-2xl text-brand-navy tracking-tight">NHFAS</span>
             </div>
             <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Welcome back</h1>
-            <p className="text-slate-500 mt-2">Please enter your details to sign in.</p>
+            <p className="text-slate-500 mt-2">{isPasswordRecovery ? 'Choose a new password.' : isResetting ? 'Request a password recovery link.' : 'Please enter your details to sign in.'}</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6 mt-8">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700 block">Email</label>
-              <div className="relative">
+                {!isPasswordRecovery && <label className="text-sm font-medium text-slate-700 block">Email</label>}
+                {!isPasswordRecovery && <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <Mail className="h-5 w-5 text-slate-400" />
                 </div>
                 <input
                   type="email"
-                  required
+                  required={!isPasswordRecovery}
+                  disabled={isPasswordRecovery}
                   className="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green outline-none transition-all"
                   placeholder="Enter your email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 />
-              </div>
+              </div>}
             </div>
 
-            <div className="space-y-2">
+            {!isResetting && <div className="space-y-2">
               <div className="flex justify-between items-center">
-                <label className="text-sm font-medium text-slate-700 block">Password</label>
-                <a href="#" className="text-sm font-medium text-brand-green hover:text-brand-green/80">Forgot password?</a>
+                <label className="text-sm font-medium text-slate-700 block">{isPasswordRecovery ? 'New password' : 'Password'}</label>
+                {!isPasswordRecovery && <button type="button" onClick={() => { setIsResetting(true); setNeedsConfirmation(false); setError(''); setMessage(''); }} className="text-sm font-medium text-brand-green hover:text-brand-green/80">Forgot password?</button>}
               </div>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -82,19 +130,23 @@ const Login = () => {
                 <input
                   type="password"
                   required
+                  minLength={6}
                   className="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green outline-none transition-all"
                   placeholder="••••••••"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 />
               </div>
-            </div>
+            </div>}
 
             {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
+            {message && <p className="text-sm text-brand-green" role="status">{message}</p>}
+            {needsConfirmation && <button type="button" onClick={resendConfirmation} disabled={isResending || !formData.email} className="text-left text-sm font-semibold text-brand-navy underline underline-offset-2 disabled:opacity-60">{isResending ? 'Requesting another email...' : 'Resend confirmation email'}</button>}
 
             <Button variant="primary" className="w-full flex justify-center items-center gap-2 py-3" type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Signing in...' : 'Sign In'} <ArrowRight className="w-4 h-4" />
+              {isSubmitting ? 'Please wait...' : isPasswordRecovery ? 'Save new password' : isResetting ? 'Send recovery link' : 'Sign In'} <ArrowRight className="w-4 h-4" />
             </Button>
+            {(isResetting || isPasswordRecovery) && <button type="button" onClick={() => { setIsResetting(false); setIsPasswordRecovery(false); setMessage(''); setError(''); }} className="w-full text-center text-sm font-medium text-slate-600 underline underline-offset-2">Back to sign in</button>}
           </form>
 
           <div className="text-center text-sm text-slate-500 mt-8">

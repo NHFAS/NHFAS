@@ -17,6 +17,21 @@ const SignUp = () => {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [confirmationPending, setConfirmationPending] = useState(false);
+  const [isResending, setIsResending] = useState(false);
+
+  const resendConfirmation = async () => {
+    setError('');
+    setIsResending(true);
+    const { error: resendError } = await supabase.auth.resend({
+      type: 'signup',
+      email: formData.email,
+      options: { emailRedirectTo: `${window.location.origin}/login?confirmed=1` },
+    });
+    if (resendError) setError(resendError.message);
+    else setMessage(`A new confirmation email was requested for ${formData.email}. Check your spam folder too.`);
+    setIsResending(false);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -28,9 +43,10 @@ const SignUp = () => {
       email: formData.email,
       password: formData.password,
       options: {
+        emailRedirectTo: `${window.location.origin}/login?confirmed=1`,
         data: {
           full_name: formData.name,
-          role: accountType === 'provider' ? 'service_provider' : 'client',
+          role: accountType === 'provider' ? 'service_provider' : accountType === 'operator' ? 'heavy_operator' : 'client',
         },
       },
     });
@@ -41,12 +57,19 @@ const SignUp = () => {
       return;
     }
 
+    if (data.user?.identities?.length === 0) {
+      setError('An account with this email already exists. Sign in or use account recovery instead.');
+      setIsSubmitting(false);
+      return;
+    }
+
     if (data.session) {
       navigate('/dashboard');
       return;
     }
 
-    setMessage('Account created. Check your email to confirm your account.');
+    setConfirmationPending(true);
+    setMessage(`Account created. A confirmation link was requested for ${formData.email}. Check your spam folder if it does not arrive.`);
     setIsSubmitting(false);
   };
 
@@ -83,37 +106,48 @@ const SignUp = () => {
               <span className="font-extrabold text-2xl text-brand-navy tracking-tight">NHFAS</span>
             </div>
             <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Create an account</h1>
-            <p className="text-slate-500 mt-2">Start your 30-day free trial.</p>
+            <p className="text-slate-500 mt-2">Create an account to request or provide services.</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6 mt-8">
             {/* Account Type Selector */}
-            <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-2">
               <button
                 type="button"
                 onClick={() => setAccountType('customer')}
-                className={cn(
-                  "flex flex-col items-center justify-center gap-2 p-4 rounded-xl border-2 transition-all",
+                  className={cn(
+                  "flex flex-col items-center justify-center gap-2 p-3 rounded-xl border-2 transition-all",
                   accountType === 'customer' 
                     ? "border-brand-green bg-green-50 text-brand-green" 
                     : "border-slate-100 bg-white text-slate-500 hover:border-slate-200"
                 )}
               >
                 <User className="w-6 h-6" />
-                <span className="font-semibold text-sm">Customer</span>
+                <span className="font-semibold text-xs sm:text-sm">Customer</span>
               </button>
               <button
                 type="button"
                 onClick={() => setAccountType('provider')}
-                className={cn(
-                  "flex flex-col items-center justify-center gap-2 p-4 rounded-xl border-2 transition-all",
+                  className={cn(
+                  "flex flex-col items-center justify-center gap-2 p-3 rounded-xl border-2 transition-all",
                   accountType === 'provider' 
                     ? "border-brand-navy bg-slate-50 text-brand-navy" 
                     : "border-slate-100 bg-white text-slate-500 hover:border-slate-200"
                 )}
               >
                 <Briefcase className="w-6 h-6" />
-                <span className="font-semibold text-sm">Service Provider</span>
+                <span className="font-semibold text-xs sm:text-sm">Provider</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setAccountType('operator')}
+                className={cn(
+                  "flex flex-col items-center justify-center gap-2 p-3 rounded-xl border-2 transition-all",
+                  accountType === 'operator' ? "border-brand-navy bg-slate-50 text-brand-navy" : "border-slate-100 bg-white text-slate-500 hover:border-slate-200"
+                )}
+              >
+                <Truck className="w-6 h-6" />
+                <span className="font-semibold text-xs sm:text-sm">Heavy operator</span>
               </button>
             </div>
 
@@ -144,7 +178,7 @@ const SignUp = () => {
                   type="email"
                   required
                   className="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green outline-none transition-all"
-                  placeholder="john@example.com"
+                  placeholder="henok@example.com"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 />
@@ -169,7 +203,7 @@ const SignUp = () => {
             </div>
 
             {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
-            {message && <p className="text-sm text-brand-green" role="status">{message}</p>}
+            {message && <div className="space-y-2 text-sm text-brand-green" role="status"><p>{message}</p>{confirmationPending && <button type="button" onClick={resendConfirmation} disabled={isResending} className="font-semibold underline underline-offset-2 disabled:opacity-60">{isResending ? 'Requesting another email...' : 'Resend confirmation email'}</button>}</div>}
 
             <Button variant="primary" className="w-full flex justify-center items-center gap-2 py-3" type="submit" disabled={isSubmitting}>
               {isSubmitting ? 'Creating account...' : 'Create Account'} <ArrowRight className="w-4 h-4" />
