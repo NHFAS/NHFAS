@@ -766,6 +766,7 @@ select public.drop_policy_if_exists('provider_verifications', 'provider_verifica
 select public.drop_policy_if_exists('provider_verifications', 'provider_verifications_admin_update');
 drop policy if exists provider_documents_owner_insert on storage.objects;
 drop policy if exists provider_documents_owner_read on storage.objects;
+drop policy if exists provider_documents_owner_delete on storage.objects;
 drop policy if exists provider_documents_admin_read on storage.objects;
 select public.drop_policy_if_exists('regulatory_permits', 'regulatory_permits_participant');
 select public.drop_policy_if_exists('regulatory_permits', 'regulatory_permits_submit');
@@ -953,6 +954,8 @@ on conflict (id) do nothing;
 create policy provider_documents_owner_insert on storage.objects for insert to authenticated
 with check (bucket_id = 'provider-verification' and (storage.foldername(name))[1] = auth.uid()::text);
 create policy provider_documents_owner_read on storage.objects for select to authenticated
+using (bucket_id = 'provider-verification' and (storage.foldername(name))[1] = auth.uid()::text);
+create policy provider_documents_owner_delete on storage.objects for delete to authenticated
 using (bucket_id = 'provider-verification' and (storage.foldername(name))[1] = auth.uid()::text);
 create policy provider_documents_admin_read on storage.objects for select to authenticated
 using (bucket_id = 'provider-verification' and exists (

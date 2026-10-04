@@ -3,6 +3,22 @@ import { Check, ExternalLink, LoaderCircle, ShieldCheck, X } from 'lucide-react'
 import { Button } from '../components/Button';
 import { supabase } from '../lib/supabase';
 
+const getVerificationDocuments = (documentUrl) => {
+  if (!documentUrl) return [];
+  try {
+    const documents = JSON.parse(documentUrl);
+    if (documents && typeof documents === 'object' && !Array.isArray(documents)) {
+      return [
+        ['Front of Fayda ID', documents.front],
+        ['Back of Fayda ID', documents.back],
+      ].filter(([, path]) => typeof path === 'string' && path);
+    }
+  } catch {
+    return [['Private identity document', documentUrl]];
+  }
+  return [['Private identity document', documentUrl]];
+};
+
 const VerificationQueue = () => {
   const [role, setRole] = useState('');
   const [records, setRecords] = useState([]);
@@ -90,7 +106,11 @@ const VerificationQueue = () => {
                 <p className="text-xs font-bold uppercase tracking-wide text-brand-green">{record.verification_type.replace('_', ' ')}</p>
                 <p className="mt-2 break-all text-sm font-semibold text-brand-navy">Account {record.provider_id}</p>
                 <p className="mt-1 text-xs text-slate-500">Submitted {new Date(record.created_at).toLocaleString()}</p>
-                <Button variant="outline" onClick={() => openDocument(record.document_url)} className="mt-3 h-9 gap-2 px-3 text-sm"><ExternalLink size={15} />Open private document</Button>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {getVerificationDocuments(record.document_url).map(([label, path]) => (
+                    <Button key={path} variant="outline" onClick={() => openDocument(path)} className="h-9 gap-2 px-3 text-sm"><ExternalLink size={15} />{label}</Button>
+                  ))}
+                </div>
               </div>
               <div className="space-y-3">
                 <label className="block space-y-1 text-sm font-medium text-slate-700">Review notes<textarea rows={2} value={notes[record.id] || ''} onChange={(event) => setNotes((current) => ({ ...current, [record.id]: event.target.value }))} className="w-full border border-slate-300 px-3 py-2 font-normal focus:border-brand-green focus:outline-none" /></label>

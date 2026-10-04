@@ -1,10 +1,33 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Mail, Lock, User, ArrowRight, Home, Briefcase, Truck } from 'lucide-react';
+import { Mail, Lock, User, ArrowRight, Home, Briefcase, Truck, Camera, FileImage, FileText, LoaderCircle } from 'lucide-react';
 import logo from '../assets/logo.png';
 import { Button } from '../components/Button';
 import { cn } from '../lib/utils';
 import { supabase } from '../lib/supabase';
+import { submitIdentityVerification, validateIdentityPhotos } from '../lib/submitIdentityVerification';
+import IdentityCameraCapture from '../components/IdentityCameraCapture';
+
+const AUTH_EMAIL_COOLDOWN_MS = 60000;
+
+const getStoredCooldownRemaining = (key) => {
+  try {
+    const value = Number(localStorage.getItem(key) || '0');
+    if (!value) return 0;
+    const remaining = value - Date.now();
+    return remaining > 0 ? Math.ceil(remaining / 1000) : 0;
+  } catch {
+    return 0;
+  }
+};
+
+const setStoredCooldown = (key) => {
+  try {
+    localStorage.setItem(key, String(Date.now() + AUTH_EMAIL_COOLDOWN_MS));
+  } catch {
+    // ignore storage errors
+  }
+};
 
 const SignUp = () => {
   const navigate = useNavigate();
@@ -14,22 +37,65 @@ const SignUp = () => {
     email: '',
     password: '',
   });
+  const [identityPhotos, setIdentityPhotos] = useState({ front: null, back: null });
+  const [identityConsent, setIdentityConsent] = useState(false);
+  const [cameraSide, setCameraSide] = useState(null);
+  const [createdUserId, setCreatedUserId] = useState('');
+  const fileInputs = useRef({});
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [confirmationPending, setConfirmationPending] = useState(false);
   const [isResending, setIsResending] = useState(false);
+  const [cooldownSeconds, setCooldownSeconds] = useState(0);
+
+  useEffect(() => {
+    if (cooldownSeconds <= 0) return;
+
+    const timer = window.setTimeout(() => {
+      setCooldownSeconds((current) => (current > 0 ? current - 1 : 0));
+    }, 1000);
+
+    return () => window.clearTimeout(timer);
+  }, [cooldownSeconds]);
+
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) navigate('/dashboard', { replace: true });
+    };
+
+    checkSession();
+  }, [navigate]);
 
   const resendConfirmation = async () => {
+    const cooldownRemaining = Math.max(cooldownSeconds, getStoredCooldownRemaining('nhfas_resend_signup_cooldown'));
+    if (!formData.email || cooldownRemaining > 0) {
+      setCooldownSeconds(cooldownRemaining);
+      setError(cooldownRemaining > 0 ? `Please wait ${cooldownRemaining}s before requesting another email.` : 'Please enter an email address.');
+      return;
+    }
+
     setError('');
     setIsResending(true);
+    setStoredCooldown('nhfas_resend_signup_cooldown');
     const { error: resendError } = await supabase.auth.resend({
       type: 'signup',
       email: formData.email,
       options: { emailRedirectTo: `${window.location.origin}/login?confirmed=1` },
     });
-    if (resendError) setError(resendError.message);
-    else setMessage(`A new confirmation email was requested for ${formData.email}. Check your spam folder too.`);
+
+    if (resendError) {
+      const message = resendError.message.toLowerCase().includes('rate') || resendError.message.toLowerCase().includes('too many requests')
+        ? 'Too many requests. Please wait a moment before requesting another email.'
+        : resendError.message;
+      setError(message);
+      setCooldownSeconds(60);
+    } else {
+      setMessage(`A new confirmation email was requested for ${formData.email}. Check your spam folder too.`);
+      setCooldownSeconds(60);
+    }
+
     setIsResending(false);
   };
 
@@ -38,6 +104,32 @@ const SignUp = () => {
     setError('');
     setMessage('');
     setIsSubmitting(true);
+
+    if (createdUserId) {
+      try {
+        await submitIdentityVerification(supabase, createdUserId, identityPhotos);
+        navigate('/dashboard');
+      } catch (submitError) {
+        setError(submitError.message);
+        setIsSubmitting(false);
+      }
+      return;
+    }
+
+    const requiresIdentityVerification = accountType !== 'customer';
+    if (requiresIdentityVerification && (!identityPhotos.front || !identityPhotos.back || !identityConsent)) {
+      setError('Add both sides of your Fayda ID and confirm consent before creating a provider account.');
+      setIsSubmitting(false);
+      return;
+    }
+    if (requiresIdentityVerification) {
+      const photoError = validateIdentityPhotos(identityPhotos);
+      if (photoError) {
+        setError(photoError);
+        setIsSubmitting(false);
+        return;
+      }
+    }
 
     const { data, error: signUpError } = await supabase.auth.signUp({
       email: formData.email,
@@ -64,12 +156,24 @@ const SignUp = () => {
     }
 
     if (data.session) {
+      if (requiresIdentityVerification) {
+        try {
+          await submitIdentityVerification(supabase, data.user.id, identityPhotos);
+        } catch (submitError) {
+          setCreatedUserId(data.user.id);
+          setError(`Your account was created, but the ID photos could not be submitted. ${submitError.message} You can retry here or submit them later in Profile & settings.`);
+          setIsSubmitting(false);
+          return;
+        }
+      }
       navigate('/dashboard');
       return;
     }
 
     setConfirmationPending(true);
-    setMessage(`Account created. A confirmation link was requested for ${formData.email}. Check your spam folder if it does not arrive.`);
+    setMessage(requiresIdentityVerification
+      ? `Account created. A confirmation link was requested for ${formData.email}. After confirming and signing in, retake and submit both Fayda ID photos in Profile & settings. For your privacy, photos are not saved in this browser.`
+      : `Account created. A confirmation link was requested for ${formData.email}. Check your spam folder if it does not arrive.`);
     setIsSubmitting(false);
   };
 
@@ -114,7 +218,12 @@ const SignUp = () => {
               <div className="grid grid-cols-3 gap-2">
               <button
                 type="button"
-                onClick={() => setAccountType('customer')}
+                onClick={() => {
+                  setAccountType('customer');
+                  setIdentityPhotos({ front: null, back: null });
+                  setIdentityConsent(false);
+                }}
+                disabled={isSubmitting || confirmationPending || Boolean(createdUserId)}
                   className={cn(
                   "flex flex-col items-center justify-center gap-2 p-3 rounded-xl border-2 transition-all",
                   accountType === 'customer' 
@@ -128,6 +237,7 @@ const SignUp = () => {
               <button
                 type="button"
                 onClick={() => setAccountType('provider')}
+                disabled={isSubmitting || confirmationPending || Boolean(createdUserId)}
                   className={cn(
                   "flex flex-col items-center justify-center gap-2 p-3 rounded-xl border-2 transition-all",
                   accountType === 'provider' 
@@ -141,6 +251,7 @@ const SignUp = () => {
               <button
                 type="button"
                 onClick={() => setAccountType('operator')}
+                disabled={isSubmitting || confirmationPending || Boolean(createdUserId)}
                 className={cn(
                   "flex flex-col items-center justify-center gap-2 p-3 rounded-xl border-2 transition-all",
                   accountType === 'operator' ? "border-brand-navy bg-slate-50 text-brand-navy" : "border-slate-100 bg-white text-slate-500 hover:border-slate-200"
@@ -150,6 +261,42 @@ const SignUp = () => {
                 <span className="font-semibold text-xs sm:text-sm">Heavy operator</span>
               </button>
             </div>
+
+            {accountType !== 'customer' && !createdUserId && (
+              <section className="space-y-4 rounded-2xl border border-brand-green/20 bg-brand-softBlue/60 p-4" aria-labelledby="fayda-signup-heading">
+                <div>
+                  <h2 id="fayda-signup-heading" className="text-base font-bold text-brand-navy">Verify your identity with Fayda</h2>
+                  <p className="mt-1 text-sm leading-5 text-slate-600">Take a clear photo of both sides of your ID. JPG or PNG, up to 10 MB per photo.</p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {['front', 'back'].map((side) => (
+                    <fieldset key={side} className="space-y-3 rounded-xl border border-slate-200 bg-white p-3">
+                      <legend className="px-1 text-sm font-semibold capitalize text-brand-navy">{side} of ID</legend>
+                      <p className="truncate text-xs text-slate-500">{identityPhotos[side]?.name || 'No photo selected'}</p>
+                      <input
+                        ref={(input) => { fileInputs.current[side] = input; }}
+                        type="file"
+                        accept="image/jpeg,image/png"
+                        onChange={(event) => {
+                          setIdentityPhotos((current) => ({ ...current, [side]: event.target.files?.[0] || null }));
+                          event.target.value = '';
+                        }}
+                        className="sr-only"
+                        aria-label={`Choose a photo of the ${side} of your Fayda ID`}
+                      />
+                      <div className="flex flex-wrap gap-2">
+                        <Button type="button" variant="outline" disabled={isSubmitting} onClick={() => setCameraSide(side)} className="h-9 gap-2 px-3 text-xs"><Camera size={14} />Take photo</Button>
+                        <Button type="button" variant="outline" disabled={isSubmitting} onClick={() => fileInputs.current[side]?.click()} className="h-9 gap-2 px-3 text-xs"><FileImage size={14} />Choose photo</Button>
+                      </div>
+                    </fieldset>
+                  ))}
+                </div>
+                <label className="flex items-start gap-3 text-xs leading-5 text-slate-600">
+                  <input type="checkbox" checked={identityConsent} onChange={(event) => setIdentityConsent(event.target.checked)} className="mt-1 accent-brand-green" />
+                  <span>I confirm these are photos of my Fayda ID and consent to NHFAS storing them privately for identity verification.</span>
+                </label>
+              </section>
+            )}
 
             <div className="space-y-2">
               <label className="text-sm font-medium text-slate-700 block">Full Name</label>
@@ -166,6 +313,13 @@ const SignUp = () => {
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 />
               </div>
+              {cameraSide && (
+                <IdentityCameraCapture
+                  side={cameraSide}
+                  onCapture={(photo) => setIdentityPhotos((current) => ({ ...current, [cameraSide]: photo }))}
+                  onClose={() => setCameraSide(null)}
+                />
+              )}
             </div>
 
             <div className="space-y-2">
@@ -203,10 +357,14 @@ const SignUp = () => {
             </div>
 
             {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
-            {message && <div className="space-y-2 text-sm text-brand-green" role="status"><p>{message}</p>{confirmationPending && <button type="button" onClick={resendConfirmation} disabled={isResending} className="font-semibold underline underline-offset-2 disabled:opacity-60">{isResending ? 'Requesting another email...' : 'Resend confirmation email'}</button>}</div>}
+            {message && <div className="space-y-2 text-sm text-brand-green" role="status"><p>{message}</p>{confirmationPending && <button type="button" onClick={resendConfirmation} disabled={isResending || cooldownSeconds > 0} className="font-semibold underline underline-offset-2 disabled:opacity-60">{isResending ? 'Requesting another email...' : cooldownSeconds > 0 ? `Wait ${cooldownSeconds}s before retrying` : 'Resend confirmation email'}</button>}</div>}
 
-            <Button variant="primary" className="w-full flex justify-center items-center gap-2 py-3" type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Creating account...' : 'Create Account'} <ArrowRight className="w-4 h-4" />
+            <Button variant="primary" className="w-full flex justify-center items-center gap-2 py-3" type="submit" disabled={isSubmitting || confirmationPending}>
+              {isSubmitting
+                ? <><LoaderCircle className="h-4 w-4 animate-spin" />{createdUserId ? 'Submitting ID photos...' : 'Creating account...'}</>
+                : createdUserId
+                  ? <><FileText className="h-4 w-4" />Retry ID submission</>
+                  : <>Create Account <ArrowRight className="w-4 h-4" /></>}
             </Button>
           </form>
 

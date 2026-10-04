@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '../../lib/utils';
-import { LayoutDashboard, Calendar, Briefcase, Settings, ShieldCheck, Truck, LogOut, X } from 'lucide-react';
+import { Bell, LayoutDashboard, Calendar, Briefcase, Settings, ShieldCheck, Truck, LogOut, Star, X, Wallet } from 'lucide-react';
 import logo from '../../assets/logo.png';
 import { supabase } from '../../lib/supabase';
 
@@ -26,6 +26,9 @@ const Sidebar = ({ mobileOpen, onNavigate }) => {
   const links = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { name: role === 'client' ? 'My requests' : 'Job marketplace', href: '/dashboard/bookings', icon: role === 'client' ? Calendar : Briefcase },
+    { name: 'Payments', href: '/dashboard/earnings', icon: Wallet },
+    { name: 'Reviews', href: '/dashboard/reviews', icon: Star },
+    { name: 'Notifications', href: '/dashboard/notifications', icon: Bell },
     ...(role === 'admin' ? [{ name: 'Verification queue', href: '/dashboard/verification', icon: ShieldCheck }] : []),
     { name: role === 'heavy_operator' ? 'Fleet & profile' : 'Profile & settings', href: '/dashboard/settings', icon: role === 'heavy_operator' ? Truck : Settings },
   ];

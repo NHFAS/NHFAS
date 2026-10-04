@@ -1,7 +1,9 @@
-import React, { useEffect, useState } from 'react';
-import { Check, FileText, LoaderCircle, Plus, ShieldCheck, Truck } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Camera, Check, FileImage, FileText, LoaderCircle, Plus, ShieldCheck, Truck } from 'lucide-react';
 import { Button } from '../components/Button';
 import { supabase } from '../lib/supabase';
+import { submitIdentityVerification } from '../lib/submitIdentityVerification';
+import IdentityCameraCapture from '../components/IdentityCameraCapture';
 
 const Settings = () => {
   const [user, setUser] = useState(null);
@@ -14,7 +16,10 @@ const Settings = () => {
   const [maintenance, setMaintenance] = useState([]);
   const [vehicleForm, setVehicleForm] = useState({ plate_number: '', make: '', model: '', vehicle_class_id: '', rated_payload_kg: '' });
   const [maintenanceForm, setMaintenanceForm] = useState({ vehicle_id: '', maintenance_type: '', description: '', scheduled_at: '', cost: '' });
-  const [file, setFile] = useState(null);
+  const [identityPhotos, setIdentityPhotos] = useState({ front: null, back: null });
+  const [identityConsent, setIdentityConsent] = useState(false);
+  const fileInputs = useRef({});
+  const [cameraSide, setCameraSide] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -92,37 +97,19 @@ const Settings = () => {
 
   const submitVerification = async (event) => {
     event.preventDefault();
-    if (!file || !user) return;
-    if (!['application/pdf', 'image/jpeg', 'image/png'].includes(file.type) || file.size > 10 * 1024 * 1024) {
-      setError('Choose a PDF, JPG, or PNG file under 10 MB.');
-      return;
-    }
+    if (!identityPhotos.front || !identityPhotos.back || !user || !identityConsent) return;
     setSaving(true);
     setError('');
     setMessage('');
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const documentPath = `${user.id}/${crypto.randomUUID()}-${safeName}`;
-    const { error: uploadError } = await supabase.storage.from('provider-verification').upload(documentPath, file, {
-      contentType: file.type,
-      cacheControl: '3600',
-      upsert: false,
-    });
-    if (uploadError) {
-      setError(uploadError.message);
-      setSaving(false);
-      return;
-    }
-    const { data, error: submitError } = await supabase.from('provider_verifications').insert({
-      provider_id: user.id,
-      verification_type: 'identity',
-      document_url: documentPath,
-      status: 'pending',
-    }).select('status, document_url, created_at, notes, expires_at').single();
-    if (submitError) setError(submitError.message);
-    else {
+    try {
+      const data = await submitIdentityVerification(supabase, user.id, identityPhotos);
       setVerification(data);
-      setMessage('Identity document submitted for review.');
-      setFile(null);
+      setMessage('Both sides of your Fayda ID were submitted for review.');
+      setIdentityPhotos({ front: null, back: null });
+      setIdentityConsent(false);
+      Object.values(fileInputs.current).forEach((input) => { if (input) input.value = ''; });
+    } catch (submitError) {
+      setError(submitError.message);
     }
     setSaving(false);
   };
@@ -211,19 +198,49 @@ const Settings = () => {
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <h2 className="text-lg font-bold text-brand-navy">Identity verification</h2>
-              <p className="mt-1 max-w-xl text-sm leading-6 text-slate-600">Providers must be approved before accepting jobs. Documents stay in private storage and are visible only to you and platform administrators.</p>
+              <p className="mt-1 max-w-xl text-sm leading-6 text-slate-600">Providers must be approved before accepting jobs. Photos stay in private storage and are visible only to you and platform administrators.</p>
             </div>
             <span className="inline-flex items-center gap-2 bg-slate-100 px-3 py-2 text-sm font-semibold capitalize text-slate-700"><ShieldCheck size={17} />{verification?.status || kycStatus}</span>
           </div>
           {verification ? (
             <div className="mt-4 flex items-start gap-3 border-l-2 border-slate-300 py-1 pl-4 text-sm text-slate-600">
               <FileText size={18} className="mt-0.5 shrink-0" />
-              <div><p>Document submitted {new Date(verification.created_at).toLocaleDateString()}</p>{verification.notes && <p className="mt-1">Review note: {verification.notes}</p>}{verification.expires_at && <p className="mt-1">Expires: {new Date(verification.expires_at).toLocaleDateString()}</p>}</div>
+              <div><p>Fayda ID photos submitted {new Date(verification.created_at).toLocaleDateString()}</p>{verification.notes && <p className="mt-1">Review note: {verification.notes}</p>}{verification.expires_at && <p className="mt-1">Expires: {new Date(verification.expires_at).toLocaleDateString()}</p>}</div>
             </div>
           ) : (
-            <form onSubmit={submitVerification} className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
-              <label className="min-w-0 flex-1 space-y-1.5 text-sm font-medium text-slate-700">Identity document (PDF, JPG, PNG; max 10 MB)<input required type="file" accept="application/pdf,image/jpeg,image/png" onChange={(event) => setFile(event.target.files?.[0] || null)} className="block w-full border border-slate-300 bg-white px-3 py-2 text-sm file:mr-3 file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:font-semibold" /></label>
-              <Button type="submit" disabled={saving || !file} className="gap-2 self-start"><FileText size={16} />Submit for review</Button>
+            <form onSubmit={submitVerification} className="mt-4 space-y-4">
+              <p className="text-sm text-slate-600">Take clear, readable photos of the front and back of your Fayda ID. JPG and PNG images up to 10 MB each are accepted.</p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {['front', 'back'].map((side) => (
+                  <fieldset key={side} className="space-y-3 rounded-xl border border-slate-200 p-4">
+                    <legend className="px-1 text-sm font-semibold capitalize text-brand-navy">{side} of ID</legend>
+                    <p className="truncate text-sm text-slate-500">{identityPhotos[side]?.name || 'No photo selected'}</p>
+                    <input
+                      ref={(input) => { fileInputs.current[side] = input; }}
+                      type="file"
+                      accept="image/jpeg,image/png"
+                      onChange={(event) => {
+                        setIdentityPhotos((current) => ({ ...current, [side]: event.target.files?.[0] || null }));
+                        event.target.value = '';
+                      }}
+                      className="sr-only"
+                      aria-label={`Choose a photo of the ${side} of your Fayda ID`}
+                    />
+                    <div className="flex flex-wrap gap-2">
+                      <Button type="button" variant="outline" disabled={saving} onClick={() => setCameraSide(side)} className="h-9 gap-2 px-3 text-sm"><Camera size={15} />Take photo</Button>
+                      <Button type="button" variant="outline" disabled={saving} onClick={() => fileInputs.current[side]?.click()} className="h-9 gap-2 px-3 text-sm"><FileImage size={15} />Choose photo</Button>
+                    </div>
+                  </fieldset>
+                ))}
+              </div>
+              <label className="flex items-start gap-3 text-sm leading-5 text-slate-600">
+                <input type="checkbox" checked={identityConsent} onChange={(event) => setIdentityConsent(event.target.checked)} className="mt-1 accent-brand-green" />
+                <span>I confirm these are photos of my Fayda ID and consent to NHFAS storing them privately for identity verification.</span>
+              </label>
+              <Button type="submit" disabled={saving || !identityPhotos.front || !identityPhotos.back || !identityConsent} className="gap-2 self-start">
+                {saving ? <LoaderCircle size={16} className="animate-spin" /> : <FileText size={16} />}
+                {saving ? 'Submitting photos...' : 'Submit for review'}
+              </Button>
             </form>
           )}
         </section>
@@ -264,6 +281,13 @@ const Settings = () => {
             </div>
           </div>
         </section>
+      )}
+      {cameraSide && (
+        <IdentityCameraCapture
+          side={cameraSide}
+          onCapture={(photo) => setIdentityPhotos((current) => ({ ...current, [cameraSide]: photo }))}
+          onClose={() => setCameraSide(null)}
+        />
       )}
     </div>
   );

@@ -101,7 +101,7 @@ const AuctionMarketplace = () => {
   };
 
   return (
-    <main className="mx-auto min-h-[70vh] max-w-6xl px-5 py-10 sm:px-8 lg:py-14">
+    <main className="mx-auto min-h-[70vh] max-w-6xl px-5 pb-10 pt-28 sm:px-8 lg:pb-14 lg:pt-32">
       <header className="flex flex-col gap-5 border-b border-slate-200 pb-6 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-green">CRAFT / COLLECT / TRADE</p>

@@ -53,6 +53,7 @@ const Bookings = () => {
   const [ratingStars, setRatingStars] = useState({});
   const [ratingComments, setRatingComments] = useState({});
   const [tracking, setTracking] = useState({});
+  const [statusDrafts, setStatusDrafts] = useState({});
   const [request, setRequest] = useState(initialRequest);
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -417,6 +418,25 @@ const Bookings = () => {
   const isClient = role === 'client';
   const isAvailableMode = mode === 'available' && !isClient;
 
+  const getStatusOptions = (job) => {
+    if (!user) return [];
+
+    if (job.client_id === user.id && ['posted', 'matching', 'confirmed'].includes(job.status)) {
+      return [{ value: 'cancelled', label: 'Cancel request' }];
+    }
+
+    if (job.provider_id === user.id || job.operator_id === user.id) {
+      const optionsMap = {
+        confirmed: [{ value: 'en_route', label: 'Mark provider en route' }],
+        en_route: [{ value: 'in_progress', label: 'Mark in progress' }],
+        in_progress: [{ value: 'completed', label: 'Mark completed' }],
+      };
+      return optionsMap[job.status] || [];
+    }
+
+    return [];
+  };
+
   return (
     <div className="mx-auto max-w-6xl space-y-6 pb-8">
       <header className="flex flex-col gap-4 border-b border-slate-200 pb-5 sm:flex-row sm:items-end sm:justify-between">
@@ -570,7 +590,8 @@ const Bookings = () => {
             const ownRating = ratings.find((rating) => rating.rater_id === user?.id);
             const escrowReleased = !escrowAccounts.length || escrowAccounts.some((account) => account.status === 'released');
             const quoteBased = job.booking_mode === 'quote' || job.job_type === 'custom_build';
-            const nextStatus = job.status === 'confirmed' ? 'en_route' : job.status === 'en_route' ? 'in_progress' : job.status === 'in_progress' ? 'completed' : null;
+            const statusOptions = getStatusOptions(job);
+            const selectedStatus = statusDrafts[job.id] || statusOptions[0]?.value || '';
             return (
               <article key={job.id} className="py-5 sm:py-6">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -657,14 +678,18 @@ const Bookings = () => {
                       )}
                     </details>
                   )}
-                  {!isAvailableMode && job.client_id === user?.id && ['posted', 'matching', 'confirmed'].includes(job.status) && (
-                    <Button variant="outline" onClick={() => updateStatus(job.id, 'cancelled')} disabled={workingJob === job.id} className="h-10 gap-2 px-4 text-sm"><X size={16} />Cancel request</Button>
-                  )}
-                  {!isAvailableMode && nextStatus && (job.provider_id === user?.id || job.operator_id === user?.id) && (
-                    <Button onClick={() => updateStatus(job.id, nextStatus)} disabled={workingJob === job.id} className="h-10 gap-2 px-4 text-sm">
-                      {nextStatus === 'completed' ? <Check size={16} /> : <ArrowRight size={16} />}
-                      Mark {statusLabels[nextStatus]?.toLowerCase()}
-                    </Button>
+                  {!isAvailableMode && statusOptions.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <select value={selectedStatus} onChange={(event) => setStatusDrafts((current) => ({ ...current, [job.id]: event.target.value }))} className="h-10 min-w-52 border border-slate-300 bg-white px-3 text-sm text-slate-700">
+                        {statusOptions.map((option) => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                      <Button onClick={() => updateStatus(job.id, selectedStatus)} disabled={workingJob === job.id || !selectedStatus} className="h-10 gap-2 px-4 text-sm">
+                        {selectedStatus === 'completed' ? <Check size={16} /> : <ArrowRight size={16} />}
+                        Update status
+                      </Button>
+                    </div>
                   )}
                   {activeJob && (job.operator_id === user?.id || job.provider_id === user?.id) && (
                     <Button variant="outline" onClick={() => toggleTracking(job.id)} className="h-10 gap-2 px-4 text-sm">

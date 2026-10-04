@@ -11,6 +11,8 @@ import DashboardLayout from './layout/DashboardLayout';
 import Dashboard from './pages/Dashboard';
 import Bookings from './pages/Bookings';
 import Settings from './pages/Settings';
+import Reviews from './pages/Reviews';
+import Notifications from './pages/Notifications';
 import VerificationQueue from './pages/VerificationQueue';
 import AuctionMarketplace from './pages/AuctionMarketplace';
 import Login from './pages/Login';
@@ -92,8 +94,9 @@ function App() {
           <Route index element={<Dashboard />} />
           <Route path="bookings" element={<Bookings />} />
           <Route path="services" element={<PlaceholderPage title="Services" />} />
-          <Route path="earnings" element={<PlaceholderPage title="Earnings" />} />
-          <Route path="reviews" element={<PlaceholderPage title="Reviews" />} />
+          <Route path="earnings" element={<PlaceholderPage title="Payments" />} />
+          <Route path="reviews" element={<Reviews />} />
+          <Route path="notifications" element={<Notifications />} />
           <Route path="settings" element={<Settings />} />
           <Route path="verification" element={<VerificationQueue />} />
         </Route>
