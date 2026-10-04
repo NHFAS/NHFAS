@@ -4,6 +4,7 @@ import { Mail, Lock, ArrowRight, Home } from 'lucide-react';
 import logo from '../assets/logo.png';
 import { Button } from '../components/Button';
 import { supabase } from '../lib/supabase';
+import { getAppUrl } from '../lib/appUrl';
 
 const AUTH_EMAIL_COOLDOWN_MS = 60000;
 
@@ -102,7 +103,7 @@ const Login = () => {
     const { error: resendError } = await supabase.auth.resend({
       type: 'signup',
       email: formData.email,
-      options: { emailRedirectTo: `${window.location.origin}/login?confirmed=1` },
+      options: { emailRedirectTo: getAppUrl('login?confirmed=1') },
     });
 
     if (resendError) {
@@ -129,7 +130,7 @@ const Login = () => {
       const { error: otpError } = await supabase.auth.signInWithOtp({
         email: formData.email,
         options: {
-          emailRedirectTo: `${window.location.origin}/login?magic=1`,
+          emailRedirectTo: getAppUrl('login?magic=1'),
         },
       });
 
@@ -173,7 +174,7 @@ const Login = () => {
 
       setStoredCooldown('nhfas_reset_password_cooldown');
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(formData.email, {
-        redirectTo: `${window.location.origin}/login?reset=1`,
+        redirectTo: getAppUrl('login?reset=1'),
       });
       if (resetError) {
         const message = resetError.message.toLowerCase().includes('rate') || resetError.message.toLowerCase().includes('too many requests')

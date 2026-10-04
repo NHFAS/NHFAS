@@ -7,6 +7,7 @@ import { cn } from '../lib/utils';
 import { supabase } from '../lib/supabase';
 import { submitIdentityVerification, validateIdentityPhotos } from '../lib/submitIdentityVerification';
 import IdentityCameraCapture from '../components/IdentityCameraCapture';
+import { getAppUrl } from '../lib/appUrl';
 
 const AUTH_EMAIL_COOLDOWN_MS = 60000;
 
@@ -82,7 +83,7 @@ const SignUp = () => {
     const { error: resendError } = await supabase.auth.resend({
       type: 'signup',
       email: formData.email,
-      options: { emailRedirectTo: `${window.location.origin}/login?confirmed=1` },
+      options: { emailRedirectTo: getAppUrl('login?confirmed=1') },
     });
 
     if (resendError) {
@@ -135,7 +136,7 @@ const SignUp = () => {
       email: formData.email,
       password: formData.password,
       options: {
-        emailRedirectTo: `${window.location.origin}/login?confirmed=1`,
+        emailRedirectTo: getAppUrl('login?confirmed=1'),
         data: {
           full_name: formData.name,
           role: accountType === 'provider' ? 'service_provider' : accountType === 'operator' ? 'heavy_operator' : 'client',
