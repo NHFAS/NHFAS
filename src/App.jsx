@@ -9,12 +9,14 @@ import CookieConsentBanner from './components/CookieConsentBanner';
 import PublicLayout from './layout/PublicLayout';
 import DashboardLayout from './layout/DashboardLayout';
 import Dashboard from './pages/Dashboard';
+import Bookings from './pages/Bookings';
+import Settings from './pages/Settings';
 import Reviews from './pages/Reviews';
-import SettingsPage from './pages/Settings';
-import SearchResults from './pages/SearchResults';
+import Notifications from './pages/Notifications';
+import VerificationQueue from './pages/VerificationQueue';
+import AuctionMarketplace from './pages/AuctionMarketplace';
 import Login from './pages/Login';
 import SignUp from './pages/SignUp';
-import FindMe from './pages/FindMe';
 
 function App() {
   const [loading, setLoading] = useState(true);
@@ -60,12 +62,11 @@ function App() {
   }
 
   return (
-    <Router>
+    <Router basename={import.meta.env.BASE_URL}>
       <Routes>
         {/* Public Routes with Navbar and Footer */}
         <Route element={<PublicLayout />}>
           <Route path="/" element={<Home />} />
-          <Route path="/search" element={<SearchResults />} />
           <Route path="/about" element={<PlaceholderPage title="About Us" />} />
           <Route path="/careers" element={<PlaceholderPage title="Careers" />} />
           <Route path="/blog" element={<PlaceholderPage title="Blog" />} />
@@ -81,7 +82,7 @@ function App() {
           <Route path="/privacy" element={<LegalPage type="privacy" />} />
           <Route path="/cookies" element={<LegalPage type="cookies" />} />
           <Route path="/trust-safety" element={<PlaceholderPage title="Trust & Safety" />} />
-          <Route path="/services/auction" element={<PlaceholderPage title="Art Auction & Bidding" />} />
+          <Route path="/services/auction" element={<AuctionMarketplace />} />
         </Route>
 
         {/* Auth Routes */}
@@ -91,13 +92,13 @@ function App() {
         {/* Dashboard Routes with Sidebar and Topbar */}
         <Route path="/dashboard" element={<DashboardLayout />}>
           <Route index element={<Dashboard />} />
-          <Route path="bookings" element={<PlaceholderPage title="My Bookings" />} />
+          <Route path="bookings" element={<Bookings />} />
           <Route path="services" element={<PlaceholderPage title="Services" />} />
-          <Route path="earnings" element={<PlaceholderPage title="Earnings" />} />
+          <Route path="earnings" element={<PlaceholderPage title="Payments" />} />
           <Route path="reviews" element={<Reviews />} />
-          <Route path="find-me" element={<FindMe />} />
-          <Route path="settings" element={<SettingsPage />} />
-          <Route path="search" element={<SearchResults />} />
+          <Route path="notifications" element={<Notifications />} />
+          <Route path="settings" element={<Settings />} />
+          <Route path="verification" element={<VerificationQueue />} />
         </Route>
         <Route path="*" element={<NotFound />} />
       </Routes>

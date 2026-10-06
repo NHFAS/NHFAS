@@ -18,9 +18,9 @@ const legalContent = {
     title: 'Privacy Policy',
     intro: 'This policy describes the information NHFAS may collect, why it is used, and the choices available to you.',
     sections: [
-      ['Information we collect', 'We may collect account details, contact information, service requests, booking information, location data needed for logistics, payment references, and messages or documents you choose to provide.'],
-      ['How we use information', 'Information is used to provide and secure the service, match jobs, coordinate bookings, process payments, support users, prevent abuse, and improve the platform.'],
-      ['Sharing and retention', 'We share information only as needed to operate a requested service, meet legal obligations, protect users, or work with trusted infrastructure providers. We retain it for as long as needed for these purposes.'],
+      ['Information we collect', 'We may collect account details, contact information, service requests, booking information, location data needed for logistics, payment references, and messages or documents you choose to provide. Providers may submit identity document photos, such as a Fayda ID, for verification.'],
+      ['How we use information', 'Information is used to provide and secure the service, verify provider identities, match jobs, coordinate bookings, process payments, support users, prevent abuse, and improve the platform.'],
+      ['Sharing and retention', 'Identity documents are kept in private storage and are accessible only to the person who submitted them and authorized platform administrators. We share information only as needed to operate a requested service, meet legal obligations, protect users, or work with trusted infrastructure providers, and retain it only as long as needed for these purposes.'],
       ['Your choices', 'You can request access, correction, or deletion of personal information where applicable. You can also control optional cookies through the consent banner.'],
       ['Security and contact', 'We use access controls and security practices appropriate to the information handled. Contact NHFAS if you have a privacy question or request.'],
     ],
@@ -43,7 +43,7 @@ const LegalPage = ({ type }) => {
   const content = legalContent[type];
 
   return (
-    <article className="flex-1 bg-brand-softBlue px-4 py-20 sm:px-6 lg:px-8 lg:py-28">
+    <article className="flex-1 bg-brand-softBlue px-4 pb-20 pt-28 sm:px-6 lg:px-8 lg:pb-28 lg:pt-32">
       <div className="mx-auto max-w-4xl">
         <p className="mb-3 text-sm font-bold uppercase tracking-[0.2em] text-brand-green">{content.label}</p>
         <h1 className="text-4xl font-extrabold tracking-tight text-brand-navy md:text-5xl">{content.title}</h1>
