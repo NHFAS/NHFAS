@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Menu, X, Truck, ArrowRight } from 'lucide-react';
+import { Search, Menu, X, Truck } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../components/Button';
 import { cn } from '../lib/utils';
@@ -10,17 +10,7 @@ const Navbar = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [activeLink, setActiveLink] = useState('Home');
-  const [searchQuery, setSearchQuery] = useState('');
   const navigate = useNavigate();
-
-  const handleSearch = (event) => {
-    event.preventDefault();
-    const query = searchQuery.trim();
-    if (!query) return;
-    setIsSearchOpen(false);
-    setIsMobileMenuOpen(false);
-    navigate(`/search?q=${encodeURIComponent(query)}`);
-  };
 
   useEffect(() => {
     const handleScroll = () => {
@@ -76,23 +66,17 @@ const Navbar = () => {
 
           {/* Actions */}
           <div className="hidden md:flex items-center space-x-4 flex-1 justify-end">
-            <form onSubmit={handleSearch} role="search" className="relative flex h-10 w-full max-w-[400px] items-center justify-end">
+            <div className="relative flex items-center justify-end h-10 w-full max-w-[400px]">
               <input
-                type="search"
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
+                type="text"
                 placeholder="Search services, artisans..."
-                aria-label="Search services and providers"
                 className={cn(
                   "absolute right-0 h-full bg-slate-50 border border-slate-200 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-brand-green/50 focus:border-brand-green transition-all duration-300 ease-in-out",
                   isSearchOpen ? "w-full pl-5 pr-12 opacity-100" : "w-10 px-0 opacity-0 border-transparent pointer-events-none"
                 )}
                 autoFocus={isSearchOpen}
-                tabIndex={isSearchOpen ? 0 : -1}
               />
               <button 
-                type="button"
-                aria-label={isSearchOpen ? 'Close search' : 'Open search'}
                 onClick={() => setIsSearchOpen(!isSearchOpen)}
                 className={cn(
                   "p-2 transition-colors rounded-full relative z-10 flex-shrink-0",
@@ -101,7 +85,7 @@ const Navbar = () => {
               >
                 {isSearchOpen ? <X className="w-5 h-5" /> : <Search className="w-5 h-5" />}
               </button>
-            </form>
+            </div>
             
             <div className={cn(
               "flex items-center space-x-4 transition-all duration-300 origin-right flex-shrink-0",
@@ -132,20 +116,6 @@ const Navbar = () => {
       {isMobileMenuOpen && (
         <div className="md:hidden absolute top-full left-0 w-full bg-white shadow-lg border-t border-slate-100">
           <div className="px-4 pt-2 pb-6 space-y-1">
-            <form onSubmit={handleSearch} role="search" className="relative px-3 pb-2">
-              <Search aria-hidden="true" className="absolute left-6 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                type="search"
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Search services or providers"
-                aria-label="Search services and providers"
-                className="w-full rounded-lg border border-slate-200 bg-slate-50 py-3 pl-10 pr-12 text-sm focus:border-brand-green focus:outline-none focus:ring-2 focus:ring-brand-green/30"
-              />
-              <button type="submit" aria-label="Search" className="absolute right-5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-slate-500 hover:text-brand-navy focus:outline-none focus:ring-2 focus:ring-brand-green">
-                <ArrowRight className="h-4 w-4" />
-              </button>
-            </form>
             {navLinks.map((link) => (
               <Link
                 key={link.name}

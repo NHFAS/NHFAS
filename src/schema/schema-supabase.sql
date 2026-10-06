@@ -650,26 +650,13 @@ returns trigger
 language plpgsql
 security definer set search_path = public
 as $$
-declare
-  new_role public.user_role;
 begin
-  new_role := case
-    when new.raw_user_meta_data ->> 'role' = 'service_provider' then 'service_provider'::public.user_role
-    else 'client'::public.user_role
-  end;
-
-  insert into public.profiles (id, full_name, phone, role)
+  insert into public.profiles (id, full_name, phone)
   values (
     new.id,
     coalesce(new.raw_user_meta_data ->> 'full_name', split_part(coalesce(new.email, 'NHFAS user'), '@', 1)),
-    new.phone,
-    new_role
+    new.phone
   );
-
-  if new_role = 'service_provider' then
-    insert into public.provider_profiles (user_id) values (new.id);
-  end if;
-
   return new;
 end;
 $$;
@@ -678,10 +665,6 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
 after insert on auth.users
 for each row execute function public.handle_new_user();
-
-insert into public.provider_profiles (user_id)
-select id from public.profiles where role = 'service_provider'
-on conflict (user_id) do nothing;
 
 -- ---------------------------------------------------------------------
 -- Row-level security

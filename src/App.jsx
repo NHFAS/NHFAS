@@ -9,9 +9,6 @@ import CookieConsentBanner from './components/CookieConsentBanner';
 import PublicLayout from './layout/PublicLayout';
 import DashboardLayout from './layout/DashboardLayout';
 import Dashboard from './pages/Dashboard';
-import Reviews from './pages/Reviews';
-import SettingsPage from './pages/Settings';
-import SearchResults from './pages/SearchResults';
 import Login from './pages/Login';
 import SignUp from './pages/SignUp';
 import FindMe from './pages/FindMe';
@@ -65,7 +62,6 @@ function App() {
         {/* Public Routes with Navbar and Footer */}
         <Route element={<PublicLayout />}>
           <Route path="/" element={<Home />} />
-          <Route path="/search" element={<SearchResults />} />
           <Route path="/about" element={<PlaceholderPage title="About Us" />} />
           <Route path="/careers" element={<PlaceholderPage title="Careers" />} />
           <Route path="/blog" element={<PlaceholderPage title="Blog" />} />
@@ -94,10 +90,9 @@ function App() {
           <Route path="bookings" element={<PlaceholderPage title="My Bookings" />} />
           <Route path="services" element={<PlaceholderPage title="Services" />} />
           <Route path="earnings" element={<PlaceholderPage title="Earnings" />} />
-          <Route path="reviews" element={<Reviews />} />
+          <Route path="reviews" element={<PlaceholderPage title="Reviews" />} />
           <Route path="find-me" element={<FindMe />} />
-          <Route path="settings" element={<SettingsPage />} />
-          <Route path="search" element={<SearchResults />} />
+          <Route path="settings" element={<PlaceholderPage title="Settings" />} />
         </Route>
         <Route path="*" element={<NotFound />} />
       </Routes>
