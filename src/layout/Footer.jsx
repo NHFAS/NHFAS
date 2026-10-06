@@ -67,11 +67,6 @@ const Footer = () => {
                 <path d="M9 12a4 4 0 1 0 4 4V4a5 5 0 0 0 5 5" />
               </svg>
             </a>
-            <a href="https://www.youtube.com/@NHFAS-u1r" target="_blank" rel="noopener noreferrer" className="p-2 bg-slate-800 rounded-full hover:bg-brand-green hover:text-white transition-colors" aria-label="YouTube">
-              <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
-                <path d="M23.5 6.2a3.02 3.02 0 0 0-2.13-2.14C19.47 3.5 12 3.5 12 3.5s-7.47 0-9.37.56A3.02 3.02 0 0 0 .5 6.2 31.3 31.3 0 0 0 0 12a31.3 31.3 0 0 0 .5 5.8 3.02 3.02 0 0 0 2.13 2.14c1.9.56 9.37.56 9.37.56s7.47 0 9.37-.56a3.02 3.02 0 0 0 2.13-2.14A31.3 31.3 0 0 0 24 12a31.3 31.3 0 0 0-.5-5.8ZM9.75 15.5v-7l6.25 3.5-6.25 3.5Z"/>
-              </svg>
-            </a>
           </div>
         </div>
       </div>

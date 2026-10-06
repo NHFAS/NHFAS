@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Menu, X, Truck, ArrowRight } from 'lucide-react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../components/Button';
 import { cn } from '../lib/utils';
 import logo from '../assets/logo.png';
@@ -12,45 +12,6 @@ const Navbar = () => {
   const [activeLink, setActiveLink] = useState('Home');
   const [searchQuery, setSearchQuery] = useState('');
   const navigate = useNavigate();
-  const location = useLocation();
-
-  const scrollToSection = (sectionId) => {
-    const target = document.getElementById(sectionId);
-    if (target) {
-      const headerOffset = 100;
-      const elementPosition = target.getBoundingClientRect().top + window.scrollY;
-      const offsetPosition = elementPosition - headerOffset;
-
-      window.scrollTo({
-        top: offsetPosition,
-        behavior: 'smooth',
-      });
-      return true;
-    }
-
-    return false;
-  };
-
-  const handleNavClick = (event, link) => {
-    const hash = link.href?.split('#')[1];
-    if (!hash) {
-      setActiveLink(link.name);
-      return;
-    }
-
-    event.preventDefault();
-    setActiveLink(link.name);
-
-    if (location.pathname !== '/') {
-      navigate('/');
-      setTimeout(() => {
-        scrollToSection(hash);
-      }, 150);
-      return;
-    }
-
-    scrollToSection(hash);
-  };
 
   const handleSearch = (event) => {
     event.preventDefault();
@@ -102,7 +63,7 @@ const Navbar = () => {
               <Link
                 key={link.name}
                 to={link.href}
-                onClick={(event) => handleNavClick(event, link)}
+                onClick={() => setActiveLink(link.name)}
                 className={cn(
                   "text-sm font-semibold transition-colors hover:text-brand-green whitespace-nowrap",
                   activeLink === link.name ? "text-brand-navy border-b-2 border-brand-green pb-1" : "text-slate-500"
@@ -189,9 +150,9 @@ const Navbar = () => {
               <Link
                 key={link.name}
                 to={link.href}
-                onClick={(event) => {
+                onClick={() => {
+                  setActiveLink(link.name);
                   setIsMobileMenuOpen(false);
-                  handleNavClick(event, link);
                 }}
                 className={cn(
                   "block px-3 py-3 rounded-md text-base font-medium",

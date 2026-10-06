@@ -1,31 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, ArrowRight, Home } from 'lucide-react';
 import logo from '../assets/logo.png';
 import { Button } from '../components/Button';
 import { supabase } from '../lib/supabase';
-import { getAppUrl } from '../lib/appUrl';
-
-const AUTH_EMAIL_COOLDOWN_MS = 60000;
-
-const getStoredCooldownRemaining = (key) => {
-  try {
-    const value = Number(localStorage.getItem(key) || '0');
-    if (!value) return 0;
-    const remaining = value - Date.now();
-    return remaining > 0 ? Math.ceil(remaining / 1000) : 0;
-  } catch {
-    return 0;
-  }
-};
-
-const setStoredCooldown = (key) => {
-  try {
-    localStorage.setItem(key, String(Date.now() + AUTH_EMAIL_COOLDOWN_MS));
-  } catch {
-    // ignore storage errors
-  }
-};
 
 const Login = () => {
   const navigate = useNavigate();
@@ -34,162 +12,12 @@ const Login = () => {
     password: '',
   });
   const [error, setError] = useState('');
-  const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isResending, setIsResending] = useState(false);
-  const [isResetting, setIsResetting] = useState(false);
-  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
-  const [isMagicLinkMode, setIsMagicLinkMode] = useState(false);
-  const [needsConfirmation, setNeedsConfirmation] = useState(false);
-  const [cooldownSeconds, setCooldownSeconds] = useState(0);
-
-  useEffect(() => {
-    if (cooldownSeconds <= 0) return;
-
-    const timer = window.setTimeout(() => {
-      setCooldownSeconds((current) => (current > 0 ? current - 1 : 0));
-    }, 1000);
-
-    return () => window.clearTimeout(timer);
-  }, [cooldownSeconds]);
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-
-    if (params.get('confirmed') === '1') setMessage('Email confirmed. You can sign in now.');
-    if (params.get('magic') === '1') setMessage('Secure magic link received. Sign in from the link to continue.');
-    if (params.get('reset') === '1' || hashParams.get('type') === 'recovery') {
-      setIsPasswordRecovery(true);
-      setMessage('Create a new password to finish the reset.');
-    }
-
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session && window.location.hash.includes('type=recovery')) {
-        setIsPasswordRecovery(true);
-        setMessage('Create a new password to finish the reset.');
-      } else if (session) {
-        navigate('/dashboard', { replace: true });
-      }
-    };
-
-    checkSession();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'PASSWORD_RECOVERY') {
-        setIsPasswordRecovery(true);
-        setMessage('Create a new password to finish the reset.');
-      }
-      if (session) {
-        setError('');
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, [navigate]);
-
-  const resendConfirmation = async () => {
-    const cooldownRemaining = Math.max(cooldownSeconds, getStoredCooldownRemaining('nhfas_resend_signup_cooldown'));
-    if (!formData.email || cooldownRemaining > 0) {
-      setCooldownSeconds(cooldownRemaining);
-      setError(cooldownRemaining > 0 ? `Please wait ${cooldownRemaining}s before requesting another email.` : 'Please enter an email address.');
-      return;
-    }
-
-    setIsResending(true);
-    setError('');
-    setStoredCooldown('nhfas_resend_signup_cooldown');
-    const { error: resendError } = await supabase.auth.resend({
-      type: 'signup',
-      email: formData.email,
-      options: { emailRedirectTo: getAppUrl('login?confirmed=1') },
-    });
-
-    if (resendError) {
-      const message = resendError.message.includes('rate') || resendError.message.toLowerCase().includes('too many requests')
-        ? 'Too many requests. Please wait a moment before requesting another email.'
-        : resendError.message;
-      setError(message);
-      setCooldownSeconds(60);
-    } else {
-      setMessage(`A new confirmation email was requested for ${formData.email}. Check your spam folder too.`);
-      setCooldownSeconds(60);
-    }
-
-    setIsResending(false);
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    setMessage('');
     setIsSubmitting(true);
-
-    if (isMagicLinkMode) {
-      const { error: otpError } = await supabase.auth.signInWithOtp({
-        email: formData.email,
-        options: {
-          emailRedirectTo: getAppUrl('login?magic=1'),
-        },
-      });
-
-      if (otpError) {
-        setError(otpError.message);
-      } else {
-        setMessage(`A secure magic link has been sent to ${formData.email}. Use it to continue securely.`);
-      }
-
-      setIsSubmitting(false);
-      return;
-    }
-
-    if (isPasswordRecovery) {
-      if (!formData.password || formData.password.length < 6) {
-        setError('Choose a new password with at least 6 characters.');
-        setIsSubmitting(false);
-        return;
-      }
-
-      const { error: updateError } = await supabase.auth.updateUser({ password: formData.password });
-      if (updateError) {
-        setError(updateError.message);
-        setIsSubmitting(false);
-        return;
-      }
-
-      setMessage('Password updated successfully. Redirecting to your dashboard...');
-      navigate('/dashboard', { replace: true });
-      return;
-    }
-
-    if (isResetting) {
-      const cooldownRemaining = Math.max(cooldownSeconds, getStoredCooldownRemaining('nhfas_reset_password_cooldown'));
-      if (cooldownRemaining > 0) {
-        setError(`Please wait ${cooldownRemaining}s before requesting another reset email.`);
-        setCooldownSeconds(cooldownRemaining);
-        setIsSubmitting(false);
-        return;
-      }
-
-      setStoredCooldown('nhfas_reset_password_cooldown');
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(formData.email, {
-        redirectTo: getAppUrl('login?reset=1'),
-      });
-      if (resetError) {
-        const message = resetError.message.toLowerCase().includes('rate') || resetError.message.toLowerCase().includes('too many requests')
-          ? 'Too many reset requests. Please wait a moment before trying again.'
-          : resetError.message;
-        setError(message);
-        setCooldownSeconds(60);
-      } else {
-        setMessage(`If an account exists for ${formData.email}, a password reset link has been sent to your email.`);
-        setCooldownSeconds(60);
-        setIsResetting(false);
-      }
-      setIsSubmitting(false);
-      return;
-    }
 
     const { error: signInError } = await supabase.auth.signInWithPassword({
       email: formData.email,
@@ -198,7 +26,6 @@ const Login = () => {
 
     if (signInError) {
       setError(signInError.message);
-      setNeedsConfirmation(signInError.code === 'email_not_confirmed' || signInError.message.toLowerCase().includes('email not confirmed'));
       setIsSubmitting(false);
       return;
     }
@@ -222,32 +49,31 @@ const Login = () => {
               <span className="font-extrabold text-2xl text-brand-navy tracking-tight">NHFAS</span>
             </div>
             <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Welcome back</h1>
-            <p className="text-slate-500 mt-2">{isPasswordRecovery ? 'Choose a new password.' : isResetting ? 'Request a password recovery link.' : isMagicLinkMode ? 'Send a secure sign-in link instead.' : 'Please enter your details to sign in.'}</p>
+            <p className="text-slate-500 mt-2">Please enter your details to sign in.</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6 mt-8">
             <div className="space-y-2">
-                {!isPasswordRecovery && <label className="text-sm font-medium text-slate-700 block">Email</label>}
-                {!isPasswordRecovery && <div className="relative">
+              <label className="text-sm font-medium text-slate-700 block">Email</label>
+              <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <Mail className="h-5 w-5 text-slate-400" />
                 </div>
                 <input
                   type="email"
-                  required={!isPasswordRecovery}
-                  disabled={isPasswordRecovery}
+                  required
                   className="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green outline-none transition-all"
                   placeholder="Enter your email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 />
-              </div>}
+              </div>
             </div>
 
-            {!isResetting && !isMagicLinkMode && <div className="space-y-2">
+            <div className="space-y-2">
               <div className="flex justify-between items-center">
-                <label className="text-sm font-medium text-slate-700 block">{isPasswordRecovery ? 'New password' : 'Password'}</label>
-                {!isPasswordRecovery && <button type="button" onClick={() => { setIsResetting(true); setNeedsConfirmation(false); setError(''); setMessage(''); }} className="text-sm font-medium text-brand-green hover:text-brand-green/80">Forgot password?</button>}
+                <label className="text-sm font-medium text-slate-700 block">Password</label>
+                <a href="#" className="text-sm font-medium text-brand-green hover:text-brand-green/80">Forgot password?</a>
               </div>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -256,29 +82,19 @@ const Login = () => {
                 <input
                   type="password"
                   required
-                  minLength={6}
                   className="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green outline-none transition-all"
                   placeholder="••••••••"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 />
               </div>
-            </div>}
+            </div>
 
             {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
-            {message && <p className="text-sm text-brand-green" role="status">{message}</p>}
-            {needsConfirmation && <button type="button" onClick={resendConfirmation} disabled={isResending || !formData.email || cooldownSeconds > 0} className="text-left text-sm font-semibold text-brand-navy underline underline-offset-2 disabled:opacity-60">{isResending ? 'Requesting another email...' : cooldownSeconds > 0 ? `Wait ${cooldownSeconds}s before retrying` : 'Resend confirmation email'}</button>}
 
             <Button variant="primary" className="w-full flex justify-center items-center gap-2 py-3" type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Please wait...' : isPasswordRecovery ? 'Save new password' : isResetting ? 'Send recovery link' : isMagicLinkMode ? 'Send magic link' : 'Sign In'} <ArrowRight className="w-4 h-4" />
+              {isSubmitting ? 'Signing in...' : 'Sign In'} <ArrowRight className="w-4 h-4" />
             </Button>
-            {(isResetting || isPasswordRecovery || isMagicLinkMode) && <button type="button" onClick={() => { setIsResetting(false); setIsPasswordRecovery(false); setIsMagicLinkMode(false); setMessage(''); setError(''); }} className="w-full text-center text-sm font-medium text-slate-600 underline underline-offset-2">Back to sign in</button>}
-            {!isPasswordRecovery && !isResetting && !isMagicLinkMode && (
-              <div className="flex flex-col gap-2 sm:flex-row sm:justify-between">
-                <button type="button" onClick={() => { setIsResetting(true); setIsMagicLinkMode(false); setNeedsConfirmation(false); setError(''); setMessage(''); }} className="text-sm font-medium text-brand-green hover:text-brand-green/80">Reset by email</button>
-                <button type="button" onClick={() => { setIsMagicLinkMode(true); setIsResetting(false); setNeedsConfirmation(false); setError(''); setMessage(''); }} className="text-sm font-medium text-brand-navy hover:text-brand-navy/80">Use magic link</button>
-              </div>
-            )}
           </form>
 
           <div className="text-center text-sm text-slate-500 mt-8">
