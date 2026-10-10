@@ -1,10 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Mail, Lock, User, ArrowRight, Home, Briefcase, Truck, Camera, FileImage, FileText, LoaderCircle } from 'lucide-react';
+import { Mail, Lock, User, ArrowRight, Home, Briefcase, Truck } from 'lucide-react';
 import logo from '../assets/logo.png';
 import { Button } from '../components/Button';
 import { cn } from '../lib/utils';
 import { supabase } from '../lib/supabase';
+<<<<<<< HEAD
 import {
   submitIdentityVerification,
   submitProviderLicenseVerification,
@@ -34,6 +35,8 @@ const setStoredCooldown = (key) => {
     // ignore storage errors
   }
 };
+=======
+>>>>>>> 63efae11eb35be3f953ce9543bf7d62b50b2b908
 
 const SignUp = () => {
   const navigate = useNavigate();
@@ -43,6 +46,7 @@ const SignUp = () => {
     email: '',
     password: '',
   });
+<<<<<<< HEAD
   const [identityPhotos, setIdentityPhotos] = useState({ front: null, back: null });
   const [identityConsent, setIdentityConsent] = useState(false);
   const [providerLicensePhoto, setProviderLicensePhoto] = useState(null);
@@ -111,6 +115,11 @@ const SignUp = () => {
 
     setIsResending(false);
   };
+=======
+  const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+>>>>>>> 63efae11eb35be3f953ce9543bf7d62b50b2b908
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -118,6 +127,7 @@ const SignUp = () => {
     setMessage('');
     setIsSubmitting(true);
 
+<<<<<<< HEAD
     if (createdUserId) {
       try {
         if (!identitySubmitted) {
@@ -164,14 +174,15 @@ const SignUp = () => {
       }
     }
 
+=======
+>>>>>>> 63efae11eb35be3f953ce9543bf7d62b50b2b908
     const { data, error: signUpError } = await supabase.auth.signUp({
       email: formData.email,
       password: formData.password,
       options: {
-        emailRedirectTo: getAppUrl('login?confirmed=1'),
         data: {
           full_name: formData.name,
-          role: accountType === 'provider' ? 'service_provider' : accountType === 'operator' ? 'heavy_operator' : 'client',
+          role: accountType === 'provider' ? 'service_provider' : 'client',
         },
       },
     });
@@ -182,13 +193,8 @@ const SignUp = () => {
       return;
     }
 
-    if (data.user?.identities?.length === 0) {
-      setError('An account with this email already exists. Sign in or use account recovery instead.');
-      setIsSubmitting(false);
-      return;
-    }
-
     if (data.session) {
+<<<<<<< HEAD
       if (requiresIdentityVerification) {
         try {
           await submitIdentityVerification(supabase, data.user.id, identityPhotos);
@@ -204,14 +210,20 @@ const SignUp = () => {
           return;
         }
       }
+=======
+>>>>>>> 63efae11eb35be3f953ce9543bf7d62b50b2b908
       navigate('/dashboard');
       return;
     }
 
+<<<<<<< HEAD
     setConfirmationPending(true);
     setMessage(requiresIdentityVerification
       ? `Account created. A confirmation link was requested for ${formData.email}. After confirming and signing in, retake and submit both Fayda ID photos${requiresLicenseVerification ? ` and a ${licenseDocumentName} photo` : ''} in Profile & settings. For your privacy, photos are not saved in this browser.`
       : `Account created. A confirmation link was requested for ${formData.email}. Check your spam folder if it does not arrive.`);
+=======
+    setMessage('Account created. Check your email to confirm your account.');
+>>>>>>> 63efae11eb35be3f953ce9543bf7d62b50b2b908
     setIsSubmitting(false);
   };
 
@@ -248,14 +260,15 @@ const SignUp = () => {
               <span className="font-extrabold text-2xl text-brand-navy tracking-tight">NHFAS</span>
             </div>
             <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Create an account</h1>
-            <p className="text-slate-500 mt-2">Create an account to request or provide services.</p>
+            <p className="text-slate-500 mt-2">Start your 30-day free trial.</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6 mt-8">
             {/* Account Type Selector */}
-              <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-4">
               <button
                 type="button"
+<<<<<<< HEAD
                 onClick={() => {
                   setAccountType('customer');
                   setIdentityPhotos({ front: null, back: null });
@@ -266,42 +279,35 @@ const SignUp = () => {
                 disabled={isSubmitting || confirmationPending || Boolean(createdUserId)}
                   className={cn(
                   "flex flex-col items-center justify-center gap-2 p-3 rounded-xl border-2 transition-all",
+=======
+                onClick={() => setAccountType('customer')}
+                className={cn(
+                  "flex flex-col items-center justify-center gap-2 p-4 rounded-xl border-2 transition-all",
+>>>>>>> 63efae11eb35be3f953ce9543bf7d62b50b2b908
                   accountType === 'customer' 
                     ? "border-brand-green bg-green-50 text-brand-green" 
                     : "border-slate-100 bg-white text-slate-500 hover:border-slate-200"
                 )}
               >
                 <User className="w-6 h-6" />
-                <span className="font-semibold text-xs sm:text-sm">Customer</span>
+                <span className="font-semibold text-sm">Customer</span>
               </button>
               <button
                 type="button"
                 onClick={() => setAccountType('provider')}
-                disabled={isSubmitting || confirmationPending || Boolean(createdUserId)}
-                  className={cn(
-                  "flex flex-col items-center justify-center gap-2 p-3 rounded-xl border-2 transition-all",
+                className={cn(
+                  "flex flex-col items-center justify-center gap-2 p-4 rounded-xl border-2 transition-all",
                   accountType === 'provider' 
                     ? "border-brand-navy bg-slate-50 text-brand-navy" 
                     : "border-slate-100 bg-white text-slate-500 hover:border-slate-200"
                 )}
               >
                 <Briefcase className="w-6 h-6" />
-                <span className="font-semibold text-xs sm:text-sm">Provider</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setAccountType('operator')}
-                disabled={isSubmitting || confirmationPending || Boolean(createdUserId)}
-                className={cn(
-                  "flex flex-col items-center justify-center gap-2 p-3 rounded-xl border-2 transition-all",
-                  accountType === 'operator' ? "border-brand-navy bg-slate-50 text-brand-navy" : "border-slate-100 bg-white text-slate-500 hover:border-slate-200"
-                )}
-              >
-                <Truck className="w-6 h-6" />
-                <span className="font-semibold text-xs sm:text-sm">Heavy operator</span>
+                <span className="font-semibold text-sm">Service Provider</span>
               </button>
             </div>
 
+<<<<<<< HEAD
             {accountType !== 'customer' && !createdUserId && (
               <section className="space-y-4 rounded-2xl border border-brand-green/20 bg-brand-softBlue/60 p-4" aria-labelledby="fayda-signup-heading">
                 <div>
@@ -371,6 +377,8 @@ const SignUp = () => {
               </section>
             )}
 
+=======
+>>>>>>> 63efae11eb35be3f953ce9543bf7d62b50b2b908
             <div className="space-y-2">
               <label className="text-sm font-medium text-slate-700 block">Full Name</label>
               <div className="relative">
@@ -386,6 +394,7 @@ const SignUp = () => {
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 />
               </div>
+<<<<<<< HEAD
               {cameraTarget && (
                 <IdentityCameraCapture
                   side={cameraTarget.side}
@@ -398,6 +407,8 @@ const SignUp = () => {
                   onClose={() => setCameraTarget(null)}
                 />
               )}
+=======
+>>>>>>> 63efae11eb35be3f953ce9543bf7d62b50b2b908
             </div>
 
             <div className="space-y-2">
@@ -410,7 +421,7 @@ const SignUp = () => {
                   type="email"
                   required
                   className="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green outline-none transition-all"
-                  placeholder="henok@example.com"
+                  placeholder="john@example.com"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 />
@@ -435,14 +446,19 @@ const SignUp = () => {
             </div>
 
             {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
-            {message && <div className="space-y-2 text-sm text-brand-green" role="status"><p>{message}</p>{confirmationPending && <button type="button" onClick={resendConfirmation} disabled={isResending || cooldownSeconds > 0} className="font-semibold underline underline-offset-2 disabled:opacity-60">{isResending ? 'Requesting another email...' : cooldownSeconds > 0 ? `Wait ${cooldownSeconds}s before retrying` : 'Resend confirmation email'}</button>}</div>}
+            {message && <p className="text-sm text-brand-green" role="status">{message}</p>}
 
+<<<<<<< HEAD
             <Button variant="primary" className="w-full flex justify-center items-center gap-2 py-3" type="submit" disabled={isSubmitting || confirmationPending}>
               {isSubmitting
                 ? <><LoaderCircle className="h-4 w-4 animate-spin" />{createdUserId ? 'Submitting verification photos...' : 'Creating account...'}</>
                 : createdUserId
                   ? <><FileText className="h-4 w-4" />Retry verification submission</>
                   : <>Create Account <ArrowRight className="w-4 h-4" /></>}
+=======
+            <Button variant="primary" className="w-full flex justify-center items-center gap-2 py-3" type="submit" disabled={isSubmitting}>
+              {isSubmitting ? 'Creating account...' : 'Create Account'} <ArrowRight className="w-4 h-4" />
+>>>>>>> 63efae11eb35be3f953ce9543bf7d62b50b2b908
             </Button>
           </form>
 
