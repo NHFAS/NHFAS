@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Camera, CircleAlert, LoaderCircle, X } from 'lucide-react';
 import { Button } from './Button';
 
-const IdentityCameraCapture = ({ side, onCapture, onClose }) => {
+const IdentityCameraCapture = ({ side, onCapture, onClose, documentName = 'Fayda ID', filePrefix = 'fayda' }) => {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const [cameraError, setCameraError] = useState('');
@@ -86,7 +86,7 @@ const IdentityCameraCapture = ({ side, onCapture, onClose }) => {
         return;
       }
 
-      onCapture(new File([blob], `fayda-${side}-${Date.now()}.jpg`, { type: 'image/jpeg' }));
+      onCapture(new File([blob], `${filePrefix}-${side}-${Date.now()}.jpg`, { type: 'image/jpeg' }));
       onClose();
     }, 'image/jpeg', 0.92);
   };
@@ -98,8 +98,10 @@ const IdentityCameraCapture = ({ side, onCapture, onClose }) => {
       <section role="dialog" aria-modal="true" aria-labelledby="identity-camera-title" className="w-full max-w-lg rounded-2xl bg-white p-4 shadow-2xl sm:p-6">
         <div className="mb-4 flex items-center justify-between gap-4">
           <div>
-            <h2 id="identity-camera-title" className="text-lg font-bold capitalize text-brand-navy">Take photo of {side} of Fayda ID</h2>
-            <p className="mt-1 text-sm text-slate-600">Position the full ID inside the camera view.</p>
+            <h2 id="identity-camera-title" className="text-lg font-bold capitalize text-brand-navy">
+              {documentName === 'Fayda ID' ? `Take photo of ${side} of ${documentName}` : `Take photo of ${documentName}`}
+            </h2>
+            <p className="mt-1 text-sm text-slate-600">Position the full document inside the camera view.</p>
           </div>
           <button type="button" onClick={onClose} aria-label="Close camera" className="rounded-full p-2 text-slate-500 hover:bg-slate-100">
             <X size={20} />

@@ -2,7 +2,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Camera, Check, FileImage, FileText, LoaderCircle, Plus, ShieldCheck, Truck } from 'lucide-react';
 import { Button } from '../components/Button';
 import { supabase } from '../lib/supabase';
-import { submitIdentityVerification } from '../lib/submitIdentityVerification';
+import {
+  submitIdentityVerification,
+  submitProviderLicenseVerification,
+  validateProviderLicensePhoto,
+} from '../lib/submitIdentityVerification';
 import IdentityCameraCapture from '../components/IdentityCameraCapture';
 
 const Settings = () => {
@@ -10,6 +14,7 @@ const Settings = () => {
   const [role, setRole] = useState('client');
   const [profile, setProfile] = useState({ full_name: '', phone: '', preferred_language: 'en', low_literacy_mode: false });
   const [verification, setVerification] = useState(null);
+  const [licenseVerification, setLicenseVerification] = useState(null);
   const [kycStatus, setKycStatus] = useState('pending');
   const [vehicles, setVehicles] = useState([]);
   const [vehicleClasses, setVehicleClasses] = useState([]);
@@ -18,12 +23,16 @@ const Settings = () => {
   const [maintenanceForm, setMaintenanceForm] = useState({ vehicle_id: '', maintenance_type: '', description: '', scheduled_at: '', cost: '' });
   const [identityPhotos, setIdentityPhotos] = useState({ front: null, back: null });
   const [identityConsent, setIdentityConsent] = useState(false);
+  const [licensePhoto, setLicensePhoto] = useState(null);
+  const [licenseConsent, setLicenseConsent] = useState(false);
   const fileInputs = useRef({});
-  const [cameraSide, setCameraSide] = useState(null);
+  const licenseFileInput = useRef(null);
+  const [cameraTarget, setCameraTarget] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const licenseDocumentName = 'driving license';
 
   const loadFleet = async (currentUser) => {
     const { data: vehicleData } = await supabase.from('vehicles')
@@ -62,13 +71,16 @@ const Settings = () => {
       setVehicleClasses(classData || []);
 
       if (['service_provider', 'heavy_operator'].includes(profileData?.role)) {
-        const [{ data: verificationData }, { data: providerData }] = await Promise.all([
+        const [{ data: verificationData }, { data: licenseData }, { data: providerData }] = await Promise.all([
           supabase.from('provider_verifications').select('status, document_url, created_at, notes, expires_at')
             .eq('provider_id', currentUser.id).eq('verification_type', 'identity').maybeSingle(),
+          supabase.from('provider_verifications').select('status, document_url, created_at, notes, expires_at')
+            .eq('provider_id', currentUser.id).eq('verification_type', 'license').maybeSingle(),
           supabase.from('provider_profiles').select('kyc_status').eq('user_id', currentUser.id).maybeSingle(),
         ]);
         if (mounted) {
           setVerification(verificationData);
+          setLicenseVerification(licenseData);
           setKycStatus(providerData?.kyc_status || 'pending');
         }
       }
@@ -92,6 +104,30 @@ const Settings = () => {
     }).eq('id', user.id);
     if (saveError) setError(saveError.message);
     else setMessage('Profile updated.');
+    setSaving(false);
+  };
+
+  const submitLicenseVerification = async (event) => {
+    event.preventDefault();
+    if (!user || !licenseConsent) return;
+    const photoError = validateProviderLicensePhoto(licensePhoto);
+    if (photoError) {
+      setError(photoError);
+      return;
+    }
+    setSaving(true);
+    setError('');
+    setMessage('');
+    try {
+      const data = await submitProviderLicenseVerification(supabase, user.id, licensePhoto);
+      setLicenseVerification(data);
+      setMessage(`Your ${licenseDocumentName} photo was submitted for review.`);
+      setLicensePhoto(null);
+      setLicenseConsent(false);
+      if (licenseFileInput.current) licenseFileInput.current.value = '';
+    } catch (submitError) {
+      setError(submitError.message);
+    }
     setSaving(false);
   };
 
@@ -227,7 +263,7 @@ const Settings = () => {
                       aria-label={`Choose a photo of the ${side} of your Fayda ID`}
                     />
                     <div className="flex flex-wrap gap-2">
-                      <Button type="button" variant="outline" disabled={saving} onClick={() => setCameraSide(side)} className="h-9 gap-2 px-3 text-sm"><Camera size={15} />Take photo</Button>
+                      <Button type="button" variant="outline" disabled={saving} onClick={() => setCameraTarget({ side, documentName: 'Fayda ID', filePrefix: 'fayda' })} className="h-9 gap-2 px-3 text-sm"><Camera size={15} />Take photo</Button>
                       <Button type="button" variant="outline" disabled={saving} onClick={() => fileInputs.current[side]?.click()} className="h-9 gap-2 px-3 text-sm"><FileImage size={15} />Choose photo</Button>
                     </div>
                   </fieldset>
@@ -240,6 +276,62 @@ const Settings = () => {
               <Button type="submit" disabled={saving || !identityPhotos.front || !identityPhotos.back || !identityConsent} className="gap-2 self-start">
                 {saving ? <LoaderCircle size={16} className="animate-spin" /> : <FileText size={16} />}
                 {saving ? 'Submitting photos...' : 'Submit for review'}
+              </Button>
+            </form>
+          )}
+        </section>
+      )}
+
+      {role === 'heavy_operator' && (
+        <section className="border-b border-slate-200 pb-8">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-bold capitalize text-brand-navy">{licenseDocumentName}</h2>
+              <p className="mt-1 max-w-xl text-sm leading-6 text-slate-600">Submit a clear photo of your {licenseDocumentName} for verification. JPG and PNG images up to 10 MB are accepted.</p>
+            </div>
+            {licenseVerification && (
+              <span className="inline-flex items-center gap-2 bg-slate-100 px-3 py-2 text-sm font-semibold capitalize text-slate-700">
+                <ShieldCheck size={17} />{licenseVerification.status}
+              </span>
+            )}
+          </div>
+          {licenseVerification ? (
+            <div className="mt-4 flex items-start gap-3 border-l-2 border-slate-300 py-1 pl-4 text-sm text-slate-600">
+              <FileText size={18} className="mt-0.5 shrink-0" />
+              <div>
+                <p>{licenseDocumentName} photo submitted {new Date(licenseVerification.created_at).toLocaleDateString()}</p>
+                {licenseVerification.notes && <p className="mt-1">Review note: {licenseVerification.notes}</p>}
+              </div>
+            </div>
+          ) : (
+            <form onSubmit={submitLicenseVerification} className="mt-4 space-y-4">
+              <fieldset className="space-y-3 rounded-xl border border-slate-200 p-4">
+                <legend className="px-1 text-sm font-semibold capitalize text-brand-navy">{licenseDocumentName} photo</legend>
+                <p className="truncate text-sm text-slate-500">{licensePhoto?.name || 'No photo selected'}</p>
+                <input
+                  ref={licenseFileInput}
+                  type="file"
+                  accept="image/jpeg,image/png"
+                  disabled={saving}
+                  onChange={(event) => {
+                    setLicensePhoto(event.target.files?.[0] || null);
+                    event.target.value = '';
+                  }}
+                  className="sr-only"
+                  aria-label={`Choose a photo of your ${licenseDocumentName}`}
+                />
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" disabled={saving} onClick={() => setCameraTarget({ side: 'front', documentName: `your ${licenseDocumentName}`, filePrefix: 'provider-license' })} className="h-9 gap-2 px-3 text-sm"><Camera size={15} />Take photo</Button>
+                  <Button type="button" variant="outline" disabled={saving} onClick={() => licenseFileInput.current?.click()} className="h-9 gap-2 px-3 text-sm"><FileImage size={15} />Choose photo</Button>
+                </div>
+              </fieldset>
+              <label className="flex items-start gap-3 text-sm leading-5 text-slate-600">
+                <input type="checkbox" checked={licenseConsent} disabled={saving} onChange={(event) => setLicenseConsent(event.target.checked)} className="mt-1 accent-brand-green" />
+                <span>I confirm this is a photo of my {licenseDocumentName} and consent to NHFAS storing it privately for verification.</span>
+              </label>
+              <Button type="submit" disabled={saving || !licensePhoto || !licenseConsent} className="gap-2 self-start">
+                {saving ? <LoaderCircle size={16} className="animate-spin" /> : <FileText size={16} />}
+                {saving ? 'Submitting photo...' : 'Submit for review'}
               </Button>
             </form>
           )}
@@ -282,11 +374,16 @@ const Settings = () => {
           </div>
         </section>
       )}
-      {cameraSide && (
+      {cameraTarget && (
         <IdentityCameraCapture
-          side={cameraSide}
-          onCapture={(photo) => setIdentityPhotos((current) => ({ ...current, [cameraSide]: photo }))}
-          onClose={() => setCameraSide(null)}
+          side={cameraTarget.side}
+          documentName={cameraTarget.documentName}
+          filePrefix={cameraTarget.filePrefix}
+          onCapture={(photo) => {
+            if (cameraTarget.filePrefix === 'provider-license') setLicensePhoto(photo);
+            else setIdentityPhotos((current) => ({ ...current, [cameraTarget.side]: photo }));
+          }}
+          onClose={() => setCameraTarget(null)}
         />
       )}
     </div>

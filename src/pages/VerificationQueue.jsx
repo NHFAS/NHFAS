@@ -3,8 +3,9 @@ import { Check, ExternalLink, LoaderCircle, ShieldCheck, X } from 'lucide-react'
 import { Button } from '../components/Button';
 import { supabase } from '../lib/supabase';
 
-const getVerificationDocuments = (documentUrl) => {
+const getVerificationDocuments = (documentUrl, verificationType) => {
   if (!documentUrl) return [];
+  if (verificationType === 'license') return [['License document', documentUrl]];
   try {
     const documents = JSON.parse(documentUrl);
     if (documents && typeof documents === 'object' && !Array.isArray(documents)) {
@@ -14,7 +15,7 @@ const getVerificationDocuments = (documentUrl) => {
       ].filter(([, path]) => typeof path === 'string' && path);
     }
   } catch {
-    return [['Private identity document', documentUrl]];
+    return [['Verification document', documentUrl]];
   }
   return [['Private identity document', documentUrl]];
 };
@@ -95,7 +96,7 @@ const VerificationQueue = () => {
       <header className="border-b border-slate-200 pb-5">
         <p className="text-xs font-bold uppercase tracking-[0.14em] text-brand-green">PLATFORM OPERATIONS</p>
         <h1 className="mt-2 flex items-center gap-3 text-3xl font-bold text-brand-navy"><ShieldCheck size={28} />Provider verification</h1>
-        <p className="mt-2 text-sm text-slate-600">Review identity documents before granting job acceptance access.</p>
+        <p className="mt-2 text-sm text-slate-600">Review provider identity and license documents.</p>
       </header>
       {error && <p className="border-l-4 border-red-600 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">{error}</p>}
       {records.length ? (
@@ -107,7 +108,7 @@ const VerificationQueue = () => {
                 <p className="mt-2 break-all text-sm font-semibold text-brand-navy">Account {record.provider_id}</p>
                 <p className="mt-1 text-xs text-slate-500">Submitted {new Date(record.created_at).toLocaleString()}</p>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {getVerificationDocuments(record.document_url).map(([label, path]) => (
+                  {getVerificationDocuments(record.document_url, record.verification_type).map(([label, path]) => (
                     <Button key={path} variant="outline" onClick={() => openDocument(path)} className="h-9 gap-2 px-3 text-sm"><ExternalLink size={15} />{label}</Button>
                   ))}
                 </div>

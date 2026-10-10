@@ -14,6 +14,43 @@ export const validateIdentityPhotos = (photos) => {
   return '';
 };
 
+export const validateProviderLicensePhoto = (photo) => {
+  if (!photo) return 'Choose a photo of your provider license.';
+  if (!IDENTITY_PHOTO_TYPES.has(photo.type) || photo.size > MAX_IDENTITY_PHOTO_SIZE) {
+    return 'Choose a JPG or PNG photo under 10 MB.';
+  }
+  return '';
+};
+
+const uploadVerificationDocument = async (supabase, userId, verificationType, fileName, photo) => {
+  const extension = photo.type === 'image/png' ? 'png' : 'jpg';
+  const documentPath = `${userId}/${crypto.randomUUID()}-${fileName}.${extension}`;
+  const storage = supabase.storage.from('provider-verification');
+  const { error: uploadError } = await storage.upload(documentPath, photo, {
+    contentType: photo.type,
+    cacheControl: '3600',
+    upsert: false,
+  });
+
+  if (uploadError) throw new Error(uploadError.message);
+
+  const { data, error: submitError } = await supabase.from('provider_verifications').insert({
+    provider_id: userId,
+    verification_type: verificationType,
+    document_url: documentPath,
+    status: 'pending',
+  }).select('status, document_url, created_at, notes, expires_at').single();
+
+  if (submitError) {
+    const { error: cleanupError } = await storage.remove([documentPath]);
+    throw new Error(cleanupError
+      ? `${submitError.message} Could not remove the uploaded photo: ${cleanupError.message}`
+      : submitError.message);
+  }
+
+  return data;
+};
+
 export const submitIdentityVerification = async (supabase, userId, photos) => {
   const sides = ['front', 'back'];
   const validationError = validateIdentityPhotos(photos);
@@ -61,4 +98,10 @@ export const submitIdentityVerification = async (supabase, userId, photos) => {
   }
 
   return data;
+};
+
+export const submitProviderLicenseVerification = async (supabase, userId, photo) => {
+  const validationError = validateProviderLicensePhoto(photo);
+  if (validationError) throw new Error(validationError);
+  return uploadVerificationDocument(supabase, userId, 'license', 'provider-license', photo);
 };

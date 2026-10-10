@@ -5,7 +5,12 @@ import logo from '../assets/logo.png';
 import { Button } from '../components/Button';
 import { cn } from '../lib/utils';
 import { supabase } from '../lib/supabase';
-import { submitIdentityVerification, validateIdentityPhotos } from '../lib/submitIdentityVerification';
+import {
+  submitIdentityVerification,
+  submitProviderLicenseVerification,
+  validateIdentityPhotos,
+  validateProviderLicensePhoto,
+} from '../lib/submitIdentityVerification';
 import IdentityCameraCapture from '../components/IdentityCameraCapture';
 import { getAppUrl } from '../lib/appUrl';
 
@@ -40,15 +45,22 @@ const SignUp = () => {
   });
   const [identityPhotos, setIdentityPhotos] = useState({ front: null, back: null });
   const [identityConsent, setIdentityConsent] = useState(false);
-  const [cameraSide, setCameraSide] = useState(null);
+  const [providerLicensePhoto, setProviderLicensePhoto] = useState(null);
+  const [licenseConsent, setLicenseConsent] = useState(false);
+  const [cameraTarget, setCameraTarget] = useState(null);
   const [createdUserId, setCreatedUserId] = useState('');
+  const [identitySubmitted, setIdentitySubmitted] = useState(false);
+  const [licenseSubmitted, setLicenseSubmitted] = useState(false);
   const fileInputs = useRef({});
+  const licenseFileInput = useRef(null);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [confirmationPending, setConfirmationPending] = useState(false);
   const [isResending, setIsResending] = useState(false);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
+  const licenseDocumentName = 'driving license';
+  const requiresLicenseVerification = accountType === 'operator';
 
   useEffect(() => {
     if (cooldownSeconds <= 0) return;
@@ -108,7 +120,14 @@ const SignUp = () => {
 
     if (createdUserId) {
       try {
-        await submitIdentityVerification(supabase, createdUserId, identityPhotos);
+        if (!identitySubmitted) {
+          await submitIdentityVerification(supabase, createdUserId, identityPhotos);
+          setIdentitySubmitted(true);
+        }
+        if (requiresLicenseVerification && !licenseSubmitted) {
+          await submitProviderLicenseVerification(supabase, createdUserId, providerLicensePhoto);
+          setLicenseSubmitted(true);
+        }
         navigate('/dashboard');
       } catch (submitError) {
         setError(submitError.message);
@@ -123,10 +142,23 @@ const SignUp = () => {
       setIsSubmitting(false);
       return;
     }
+    if (requiresLicenseVerification && (!providerLicensePhoto || !licenseConsent)) {
+      setError(`Add a photo of your ${licenseDocumentName} and confirm consent before creating your account.`);
+      setIsSubmitting(false);
+      return;
+    }
     if (requiresIdentityVerification) {
       const photoError = validateIdentityPhotos(identityPhotos);
       if (photoError) {
         setError(photoError);
+        setIsSubmitting(false);
+        return;
+      }
+    }
+    if (requiresLicenseVerification) {
+      const licensePhotoError = validateProviderLicensePhoto(providerLicensePhoto);
+      if (licensePhotoError) {
+        setError(licensePhotoError);
         setIsSubmitting(false);
         return;
       }
@@ -160,9 +192,14 @@ const SignUp = () => {
       if (requiresIdentityVerification) {
         try {
           await submitIdentityVerification(supabase, data.user.id, identityPhotos);
+          setIdentitySubmitted(true);
+          if (requiresLicenseVerification) {
+            await submitProviderLicenseVerification(supabase, data.user.id, providerLicensePhoto);
+            setLicenseSubmitted(true);
+          }
         } catch (submitError) {
           setCreatedUserId(data.user.id);
-          setError(`Your account was created, but the ID photos could not be submitted. ${submitError.message} You can retry here or submit them later in Profile & settings.`);
+          setError(`Your account was created, but the verification photos could not be submitted. ${submitError.message} You can retry here or submit them later in Profile & settings.`);
           setIsSubmitting(false);
           return;
         }
@@ -173,7 +210,7 @@ const SignUp = () => {
 
     setConfirmationPending(true);
     setMessage(requiresIdentityVerification
-      ? `Account created. A confirmation link was requested for ${formData.email}. After confirming and signing in, retake and submit both Fayda ID photos in Profile & settings. For your privacy, photos are not saved in this browser.`
+      ? `Account created. A confirmation link was requested for ${formData.email}. After confirming and signing in, retake and submit both Fayda ID photos${requiresLicenseVerification ? ` and a ${licenseDocumentName} photo` : ''} in Profile & settings. For your privacy, photos are not saved in this browser.`
       : `Account created. A confirmation link was requested for ${formData.email}. Check your spam folder if it does not arrive.`);
     setIsSubmitting(false);
   };
@@ -223,6 +260,8 @@ const SignUp = () => {
                   setAccountType('customer');
                   setIdentityPhotos({ front: null, back: null });
                   setIdentityConsent(false);
+                  setProviderLicensePhoto(null);
+                  setLicenseConsent(false);
                 }}
                 disabled={isSubmitting || confirmationPending || Boolean(createdUserId)}
                   className={cn(
@@ -278,6 +317,7 @@ const SignUp = () => {
                         ref={(input) => { fileInputs.current[side] = input; }}
                         type="file"
                         accept="image/jpeg,image/png"
+                        disabled={isSubmitting}
                         onChange={(event) => {
                           setIdentityPhotos((current) => ({ ...current, [side]: event.target.files?.[0] || null }));
                           event.target.value = '';
@@ -286,7 +326,7 @@ const SignUp = () => {
                         aria-label={`Choose a photo of the ${side} of your Fayda ID`}
                       />
                       <div className="flex flex-wrap gap-2">
-                        <Button type="button" variant="outline" disabled={isSubmitting} onClick={() => setCameraSide(side)} className="h-9 gap-2 px-3 text-xs"><Camera size={14} />Take photo</Button>
+                        <Button type="button" variant="outline" disabled={isSubmitting} onClick={() => setCameraTarget({ side, documentName: 'Fayda ID', filePrefix: 'fayda' })} className="h-9 gap-2 px-3 text-xs"><Camera size={14} />Take photo</Button>
                         <Button type="button" variant="outline" disabled={isSubmitting} onClick={() => fileInputs.current[side]?.click()} className="h-9 gap-2 px-3 text-xs"><FileImage size={14} />Choose photo</Button>
                       </div>
                     </fieldset>
@@ -295,6 +335,38 @@ const SignUp = () => {
                 <label className="flex items-start gap-3 text-xs leading-5 text-slate-600">
                   <input type="checkbox" checked={identityConsent} onChange={(event) => setIdentityConsent(event.target.checked)} className="mt-1 accent-brand-green" />
                   <span>I confirm these are photos of my Fayda ID and consent to NHFAS storing them privately for identity verification.</span>
+                </label>
+              </section>
+            )}
+            {requiresLicenseVerification && !createdUserId && (
+              <section className="space-y-4 rounded-2xl border border-brand-green/20 bg-brand-softBlue/60 p-4" aria-labelledby="license-signup-heading">
+                <div>
+                  <h2 id="license-signup-heading" className="text-base font-bold capitalize text-brand-navy">{licenseDocumentName}</h2>
+                  <p className="mt-1 text-sm leading-5 text-slate-600">Take a clear photo of your {licenseDocumentName}. JPG or PNG, up to 10 MB.</p>
+                </div>
+                <fieldset className="space-y-3 rounded-xl border border-slate-200 bg-white p-3">
+                  <legend className="px-1 text-sm font-semibold capitalize text-brand-navy">{licenseDocumentName} photo</legend>
+                  <p className="truncate text-xs text-slate-500">{providerLicensePhoto?.name || 'No photo selected'}</p>
+                  <input
+                    ref={licenseFileInput}
+                    type="file"
+                    accept="image/jpeg,image/png"
+                    disabled={isSubmitting}
+                    onChange={(event) => {
+                      setProviderLicensePhoto(event.target.files?.[0] || null);
+                      event.target.value = '';
+                    }}
+                    className="sr-only"
+                    aria-label={`Choose a photo of your ${licenseDocumentName}`}
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" variant="outline" disabled={isSubmitting} onClick={() => setCameraTarget({ side: 'front', documentName: `your ${licenseDocumentName}`, filePrefix: 'provider-license' })} className="h-9 gap-2 px-3 text-xs"><Camera size={14} />Take photo</Button>
+                    <Button type="button" variant="outline" disabled={isSubmitting} onClick={() => licenseFileInput.current?.click()} className="h-9 gap-2 px-3 text-xs"><FileImage size={14} />Choose photo</Button>
+                  </div>
+                </fieldset>
+                <label className="flex items-start gap-3 text-xs leading-5 text-slate-600">
+                  <input type="checkbox" checked={licenseConsent} disabled={isSubmitting} onChange={(event) => setLicenseConsent(event.target.checked)} className="mt-1 accent-brand-green" />
+                  <span>I confirm this is a photo of my {licenseDocumentName} and consent to NHFAS storing it privately for verification.</span>
                 </label>
               </section>
             )}
@@ -314,11 +386,16 @@ const SignUp = () => {
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 />
               </div>
-              {cameraSide && (
+              {cameraTarget && (
                 <IdentityCameraCapture
-                  side={cameraSide}
-                  onCapture={(photo) => setIdentityPhotos((current) => ({ ...current, [cameraSide]: photo }))}
-                  onClose={() => setCameraSide(null)}
+                  side={cameraTarget.side}
+                  documentName={cameraTarget.documentName}
+                  filePrefix={cameraTarget.filePrefix}
+                  onCapture={(photo) => {
+                    if (cameraTarget.filePrefix === 'provider-license') setProviderLicensePhoto(photo);
+                    else setIdentityPhotos((current) => ({ ...current, [cameraTarget.side]: photo }));
+                  }}
+                  onClose={() => setCameraTarget(null)}
                 />
               )}
             </div>
@@ -362,9 +439,9 @@ const SignUp = () => {
 
             <Button variant="primary" className="w-full flex justify-center items-center gap-2 py-3" type="submit" disabled={isSubmitting || confirmationPending}>
               {isSubmitting
-                ? <><LoaderCircle className="h-4 w-4 animate-spin" />{createdUserId ? 'Submitting ID photos...' : 'Creating account...'}</>
+                ? <><LoaderCircle className="h-4 w-4 animate-spin" />{createdUserId ? 'Submitting verification photos...' : 'Creating account...'}</>
                 : createdUserId
-                  ? <><FileText className="h-4 w-4" />Retry ID submission</>
+                  ? <><FileText className="h-4 w-4" />Retry verification submission</>
                   : <>Create Account <ArrowRight className="w-4 h-4" /></>}
             </Button>
           </form>
