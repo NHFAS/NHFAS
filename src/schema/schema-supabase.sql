@@ -894,11 +894,70 @@ as $$
   );
 $$;
 
+create or replace function public.is_admin()
+returns boolean language sql stable security definer set search_path = public
+as $$
+  select exists (
+    select 1 from public.profiles where id = auth.uid() and role = 'admin'
+  );
+$$;
+
+-- Admin review RPC used by the Verification Queue page. Deciding on a
+-- verification keeps an immutable reviewer/audit trail and keeps the
+-- provider's KYC status in sync with the identity decision.
+create or replace function public.review_provider_verification(
+  target_verification_id uuid,
+  decision text,
+  reviewer_notes text default null,
+  document_expires_at timestamptz default null
+)
+returns public.provider_verifications
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  result public.provider_verifications;
+begin
+  if decision not in ('approved', 'rejected') then
+    raise exception 'decision must be approved or rejected';
+  end if;
+
+  if not exists (select 1 from public.profiles where id = auth.uid() and role = 'admin') then
+    raise exception 'Only administrators can review verifications';
+  end if;
+
+  update public.provider_verifications
+     set status = decision,
+         notes = reviewer_notes,
+         expires_at = document_expires_at,
+         reviewed_by = auth.uid(),
+         reviewed_at = now()
+   where id = target_verification_id
+  returning * into result;
+
+  if result.id is null then
+    raise exception 'Verification record not found';
+  end if;
+
+  if result.verification_type = 'identity' then
+    update public.provider_profiles
+       set kyc_status = decision
+     where user_id = result.provider_id;
+  end if;
+
+  return result;
+end;
+$$;
+
+grant execute on function public.review_provider_verification(uuid, text, text, timestamptz) to authenticated;
+
 create policy provider_verifications_owner on public.provider_verifications for all to authenticated
 using (provider_id = auth.uid() or exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin'))
 with check (provider_id = auth.uid() or exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin'));
 create policy regulatory_permits_participant on public.regulatory_permits for all to authenticated
-using (public.is_job_participant(job_id)) with check (public.is_job_participant(job_id));
+using (public.is_job_participant(job_id) or public.is_admin())
+with check (public.is_job_participant(job_id) or public.is_admin());
 create policy safety_incidents_participant on public.safety_incidents for select to authenticated
 using (reporter_id = auth.uid() or public.is_job_participant(job_id));
 create policy safety_incidents_insert_reporter on public.safety_incidents for insert to authenticated
@@ -979,3 +1038,22 @@ insert into public.service_categories (code, name, category_type) values
   ('MASONRY', 'Masonry', 'artisan'),
   ('HAULAGE', 'Heavy haulage', 'haulage')
 on conflict (code) do nothing;
+
+-- Verification document storage (Fayda ID photos, provider licenses).
+insert into storage.buckets (id, name, public)
+values ('provider-verification', 'provider-verification', false)
+on conflict (id) do nothing;
+
+drop policy if exists provider_verification_upload on storage.objects;
+drop policy if exists provider_verification_select on storage.objects;
+
+create policy provider_verification_upload on storage.objects
+for insert to authenticated
+with check (bucket_id = 'provider-verification' and owner = auth.uid());
+
+create policy provider_verification_select on storage.objects
+for select to authenticated
+using (
+  bucket_id = 'provider-verification'
+  and (owner = auth.uid() or public.is_admin())
+);

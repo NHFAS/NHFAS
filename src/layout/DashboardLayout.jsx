@@ -78,6 +78,7 @@ const DashboardLayout = () => {
         fullName={profile?.full_name || 'Your account'}
         isClientMode={isClientMode}
         onToggleMode={toggleMode}
+        role={profile?.role}
       />
       <div className="flex-1 flex flex-col h-full overflow-hidden">
         <Topbar fullName={profile?.full_name || 'Your account'} isClientMode={isClientMode} onToggleMode={toggleMode} />

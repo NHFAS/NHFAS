@@ -11,10 +11,12 @@ import {
   Repeat,
   MapPin,
   Wrench,
+  BadgeCheck,
+  ShieldCheck,
 } from 'lucide-react';
 import logo from '../../assets/logo.png';
 
-const Sidebar = ({ fullName, isClientMode, onToggleMode }) => {
+const Sidebar = ({ fullName, isClientMode, onToggleMode, role }) => {
   const location = useLocation();
 
   const providerLinks = [
@@ -24,6 +26,7 @@ const Sidebar = ({ fullName, isClientMode, onToggleMode }) => {
     { name: 'Earnings', href: '/dashboard/earnings', icon: DollarSign },
     { name: 'Reviews', href: '/dashboard/reviews', icon: Star },
     { name: 'Find Me', href: '/dashboard/find-me', icon: MapPin },
+    { name: 'Verification', href: '/dashboard/verification', icon: BadgeCheck },
     { name: 'Settings', href: '/dashboard/settings', icon: Settings },
   ];
 
@@ -34,7 +37,12 @@ const Sidebar = ({ fullName, isClientMode, onToggleMode }) => {
     { name: 'Settings', href: '/dashboard/settings', icon: Settings },
   ];
 
-  const links = isClientMode ? clientLinks : providerLinks;
+  const links = [
+    ...(isClientMode ? clientLinks : providerLinks),
+    ...(role === 'admin'
+      ? [{ name: 'Verification Queue', href: '/dashboard/admin/verifications', icon: ShieldCheck }]
+      : []),
+  ];
   const initials = fullName
     .split(/\s+/)
     .filter(Boolean)

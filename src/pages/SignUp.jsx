@@ -5,38 +5,6 @@ import logo from '../assets/logo.png';
 import { Button } from '../components/Button';
 import { cn } from '../lib/utils';
 import { supabase } from '../lib/supabase';
-<<<<<<< HEAD
-import {
-  submitIdentityVerification,
-  submitProviderLicenseVerification,
-  validateIdentityPhotos,
-  validateProviderLicensePhoto,
-} from '../lib/submitIdentityVerification';
-import IdentityCameraCapture from '../components/IdentityCameraCapture';
-import { getAppUrl } from '../lib/appUrl';
-
-const AUTH_EMAIL_COOLDOWN_MS = 60000;
-
-const getStoredCooldownRemaining = (key) => {
-  try {
-    const value = Number(localStorage.getItem(key) || '0');
-    if (!value) return 0;
-    const remaining = value - Date.now();
-    return remaining > 0 ? Math.ceil(remaining / 1000) : 0;
-  } catch {
-    return 0;
-  }
-};
-
-const setStoredCooldown = (key) => {
-  try {
-    localStorage.setItem(key, String(Date.now() + AUTH_EMAIL_COOLDOWN_MS));
-  } catch {
-    // ignore storage errors
-  }
-};
-=======
->>>>>>> 63efae11eb35be3f953ce9543bf7d62b50b2b908
 
 const SignUp = () => {
   const navigate = useNavigate();
@@ -46,80 +14,9 @@ const SignUp = () => {
     email: '',
     password: '',
   });
-<<<<<<< HEAD
-  const [identityPhotos, setIdentityPhotos] = useState({ front: null, back: null });
-  const [identityConsent, setIdentityConsent] = useState(false);
-  const [providerLicensePhoto, setProviderLicensePhoto] = useState(null);
-  const [licenseConsent, setLicenseConsent] = useState(false);
-  const [cameraTarget, setCameraTarget] = useState(null);
-  const [createdUserId, setCreatedUserId] = useState('');
-  const [identitySubmitted, setIdentitySubmitted] = useState(false);
-  const [licenseSubmitted, setLicenseSubmitted] = useState(false);
-  const fileInputs = useRef({});
-  const licenseFileInput = useRef(null);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [confirmationPending, setConfirmationPending] = useState(false);
-  const [isResending, setIsResending] = useState(false);
-  const [cooldownSeconds, setCooldownSeconds] = useState(0);
-  const licenseDocumentName = 'driving license';
-  const requiresLicenseVerification = accountType === 'operator';
-
-  useEffect(() => {
-    if (cooldownSeconds <= 0) return;
-
-    const timer = window.setTimeout(() => {
-      setCooldownSeconds((current) => (current > 0 ? current - 1 : 0));
-    }, 1000);
-
-    return () => window.clearTimeout(timer);
-  }, [cooldownSeconds]);
-
-  useEffect(() => {
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) navigate('/dashboard', { replace: true });
-    };
-
-    checkSession();
-  }, [navigate]);
-
-  const resendConfirmation = async () => {
-    const cooldownRemaining = Math.max(cooldownSeconds, getStoredCooldownRemaining('nhfas_resend_signup_cooldown'));
-    if (!formData.email || cooldownRemaining > 0) {
-      setCooldownSeconds(cooldownRemaining);
-      setError(cooldownRemaining > 0 ? `Please wait ${cooldownRemaining}s before requesting another email.` : 'Please enter an email address.');
-      return;
-    }
-
-    setError('');
-    setIsResending(true);
-    setStoredCooldown('nhfas_resend_signup_cooldown');
-    const { error: resendError } = await supabase.auth.resend({
-      type: 'signup',
-      email: formData.email,
-      options: { emailRedirectTo: getAppUrl('login?confirmed=1') },
-    });
-
-    if (resendError) {
-      const message = resendError.message.toLowerCase().includes('rate') || resendError.message.toLowerCase().includes('too many requests')
-        ? 'Too many requests. Please wait a moment before requesting another email.'
-        : resendError.message;
-      setError(message);
-      setCooldownSeconds(60);
-    } else {
-      setMessage(`A new confirmation email was requested for ${formData.email}. Check your spam folder too.`);
-      setCooldownSeconds(60);
-    }
-
-    setIsResending(false);
-  };
-=======
-  const [error, setError] = useState('');
-  const [message, setMessage] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
->>>>>>> 63efae11eb35be3f953ce9543bf7d62b50b2b908
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -127,55 +24,6 @@ const SignUp = () => {
     setMessage('');
     setIsSubmitting(true);
 
-<<<<<<< HEAD
-    if (createdUserId) {
-      try {
-        if (!identitySubmitted) {
-          await submitIdentityVerification(supabase, createdUserId, identityPhotos);
-          setIdentitySubmitted(true);
-        }
-        if (requiresLicenseVerification && !licenseSubmitted) {
-          await submitProviderLicenseVerification(supabase, createdUserId, providerLicensePhoto);
-          setLicenseSubmitted(true);
-        }
-        navigate('/dashboard');
-      } catch (submitError) {
-        setError(submitError.message);
-        setIsSubmitting(false);
-      }
-      return;
-    }
-
-    const requiresIdentityVerification = accountType !== 'customer';
-    if (requiresIdentityVerification && (!identityPhotos.front || !identityPhotos.back || !identityConsent)) {
-      setError('Add both sides of your Fayda ID and confirm consent before creating a provider account.');
-      setIsSubmitting(false);
-      return;
-    }
-    if (requiresLicenseVerification && (!providerLicensePhoto || !licenseConsent)) {
-      setError(`Add a photo of your ${licenseDocumentName} and confirm consent before creating your account.`);
-      setIsSubmitting(false);
-      return;
-    }
-    if (requiresIdentityVerification) {
-      const photoError = validateIdentityPhotos(identityPhotos);
-      if (photoError) {
-        setError(photoError);
-        setIsSubmitting(false);
-        return;
-      }
-    }
-    if (requiresLicenseVerification) {
-      const licensePhotoError = validateProviderLicensePhoto(providerLicensePhoto);
-      if (licensePhotoError) {
-        setError(licensePhotoError);
-        setIsSubmitting(false);
-        return;
-      }
-    }
-
-=======
->>>>>>> 63efae11eb35be3f953ce9543bf7d62b50b2b908
     const { data, error: signUpError } = await supabase.auth.signUp({
       email: formData.email,
       password: formData.password,
@@ -194,49 +42,22 @@ const SignUp = () => {
     }
 
     if (data.session) {
-<<<<<<< HEAD
-      if (requiresIdentityVerification) {
-        try {
-          await submitIdentityVerification(supabase, data.user.id, identityPhotos);
-          setIdentitySubmitted(true);
-          if (requiresLicenseVerification) {
-            await submitProviderLicenseVerification(supabase, data.user.id, providerLicensePhoto);
-            setLicenseSubmitted(true);
-          }
-        } catch (submitError) {
-          setCreatedUserId(data.user.id);
-          setError(`Your account was created, but the verification photos could not be submitted. ${submitError.message} You can retry here or submit them later in Profile & settings.`);
-          setIsSubmitting(false);
-          return;
-        }
-      }
-=======
->>>>>>> 63efae11eb35be3f953ce9543bf7d62b50b2b908
       navigate('/dashboard');
       return;
     }
 
-<<<<<<< HEAD
-    setConfirmationPending(true);
-    setMessage(requiresIdentityVerification
-      ? `Account created. A confirmation link was requested for ${formData.email}. After confirming and signing in, retake and submit both Fayda ID photos${requiresLicenseVerification ? ` and a ${licenseDocumentName} photo` : ''} in Profile & settings. For your privacy, photos are not saved in this browser.`
-      : `Account created. A confirmation link was requested for ${formData.email}. Check your spam folder if it does not arrive.`);
-=======
     setMessage('Account created. Check your email to confirm your account.');
->>>>>>> 63efae11eb35be3f953ce9543bf7d62b50b2b908
     setIsSubmitting(false);
   };
 
   return (
     <div className="min-h-screen flex bg-brand-softBlue font-sans">
-      {/* Left side - Image/Decoration */}
       <div className="hidden lg:flex w-1/2 bg-brand-green items-center justify-center p-12 relative overflow-hidden">
-        {/* Abstract Background Shapes */}
         <div className="absolute top-0 left-0 w-full h-full opacity-20">
           <div className="absolute w-[40rem] h-[40rem] bg-white rounded-full blur-3xl -top-20 -left-20"></div>
           <div className="absolute w-[40rem] h-[40rem] bg-brand-navy rounded-full blur-3xl bottom-10 -right-20"></div>
         </div>
-        
+
         <div className="relative z-10 max-w-lg text-white space-y-6">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-white/10 backdrop-blur-md mb-4 border border-white/20 shadow-lg">
             <Truck className="w-8 h-8 text-white" />
@@ -246,7 +67,6 @@ const SignUp = () => {
         </div>
       </div>
 
-      {/* Right side - Form */}
       <div className="w-full lg:w-1/2 flex flex-col justify-center px-8 sm:px-16 lg:px-24 bg-white relative">
         <Link to="/" className="absolute top-8 right-8 sm:right-12 flex items-center gap-2 text-slate-500 hover:text-brand-navy transition-colors">
           <span className="font-medium">Back to Home</span>
@@ -264,28 +84,14 @@ const SignUp = () => {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6 mt-8">
-            {/* Account Type Selector */}
             <div className="grid grid-cols-2 gap-4">
               <button
                 type="button"
-<<<<<<< HEAD
-                onClick={() => {
-                  setAccountType('customer');
-                  setIdentityPhotos({ front: null, back: null });
-                  setIdentityConsent(false);
-                  setProviderLicensePhoto(null);
-                  setLicenseConsent(false);
-                }}
-                disabled={isSubmitting || confirmationPending || Boolean(createdUserId)}
-                  className={cn(
-                  "flex flex-col items-center justify-center gap-2 p-3 rounded-xl border-2 transition-all",
-=======
                 onClick={() => setAccountType('customer')}
                 className={cn(
                   "flex flex-col items-center justify-center gap-2 p-4 rounded-xl border-2 transition-all",
->>>>>>> 63efae11eb35be3f953ce9543bf7d62b50b2b908
-                  accountType === 'customer' 
-                    ? "border-brand-green bg-green-50 text-brand-green" 
+                  accountType === 'customer'
+                    ? "border-brand-green bg-green-50 text-brand-green"
                     : "border-slate-100 bg-white text-slate-500 hover:border-slate-200"
                 )}
               >
@@ -297,8 +103,8 @@ const SignUp = () => {
                 onClick={() => setAccountType('provider')}
                 className={cn(
                   "flex flex-col items-center justify-center gap-2 p-4 rounded-xl border-2 transition-all",
-                  accountType === 'provider' 
-                    ? "border-brand-navy bg-slate-50 text-brand-navy" 
+                  accountType === 'provider'
+                    ? "border-brand-navy bg-slate-50 text-brand-navy"
                     : "border-slate-100 bg-white text-slate-500 hover:border-slate-200"
                 )}
               >
@@ -307,78 +113,6 @@ const SignUp = () => {
               </button>
             </div>
 
-<<<<<<< HEAD
-            {accountType !== 'customer' && !createdUserId && (
-              <section className="space-y-4 rounded-2xl border border-brand-green/20 bg-brand-softBlue/60 p-4" aria-labelledby="fayda-signup-heading">
-                <div>
-                  <h2 id="fayda-signup-heading" className="text-base font-bold text-brand-navy">Verify your identity with Fayda</h2>
-                  <p className="mt-1 text-sm leading-5 text-slate-600">Take a clear photo of both sides of your ID. JPG or PNG, up to 10 MB per photo.</p>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {['front', 'back'].map((side) => (
-                    <fieldset key={side} className="space-y-3 rounded-xl border border-slate-200 bg-white p-3">
-                      <legend className="px-1 text-sm font-semibold capitalize text-brand-navy">{side} of ID</legend>
-                      <p className="truncate text-xs text-slate-500">{identityPhotos[side]?.name || 'No photo selected'}</p>
-                      <input
-                        ref={(input) => { fileInputs.current[side] = input; }}
-                        type="file"
-                        accept="image/jpeg,image/png"
-                        disabled={isSubmitting}
-                        onChange={(event) => {
-                          setIdentityPhotos((current) => ({ ...current, [side]: event.target.files?.[0] || null }));
-                          event.target.value = '';
-                        }}
-                        className="sr-only"
-                        aria-label={`Choose a photo of the ${side} of your Fayda ID`}
-                      />
-                      <div className="flex flex-wrap gap-2">
-                        <Button type="button" variant="outline" disabled={isSubmitting} onClick={() => setCameraTarget({ side, documentName: 'Fayda ID', filePrefix: 'fayda' })} className="h-9 gap-2 px-3 text-xs"><Camera size={14} />Take photo</Button>
-                        <Button type="button" variant="outline" disabled={isSubmitting} onClick={() => fileInputs.current[side]?.click()} className="h-9 gap-2 px-3 text-xs"><FileImage size={14} />Choose photo</Button>
-                      </div>
-                    </fieldset>
-                  ))}
-                </div>
-                <label className="flex items-start gap-3 text-xs leading-5 text-slate-600">
-                  <input type="checkbox" checked={identityConsent} onChange={(event) => setIdentityConsent(event.target.checked)} className="mt-1 accent-brand-green" />
-                  <span>I confirm these are photos of my Fayda ID and consent to NHFAS storing them privately for identity verification.</span>
-                </label>
-              </section>
-            )}
-            {requiresLicenseVerification && !createdUserId && (
-              <section className="space-y-4 rounded-2xl border border-brand-green/20 bg-brand-softBlue/60 p-4" aria-labelledby="license-signup-heading">
-                <div>
-                  <h2 id="license-signup-heading" className="text-base font-bold capitalize text-brand-navy">{licenseDocumentName}</h2>
-                  <p className="mt-1 text-sm leading-5 text-slate-600">Take a clear photo of your {licenseDocumentName}. JPG or PNG, up to 10 MB.</p>
-                </div>
-                <fieldset className="space-y-3 rounded-xl border border-slate-200 bg-white p-3">
-                  <legend className="px-1 text-sm font-semibold capitalize text-brand-navy">{licenseDocumentName} photo</legend>
-                  <p className="truncate text-xs text-slate-500">{providerLicensePhoto?.name || 'No photo selected'}</p>
-                  <input
-                    ref={licenseFileInput}
-                    type="file"
-                    accept="image/jpeg,image/png"
-                    disabled={isSubmitting}
-                    onChange={(event) => {
-                      setProviderLicensePhoto(event.target.files?.[0] || null);
-                      event.target.value = '';
-                    }}
-                    className="sr-only"
-                    aria-label={`Choose a photo of your ${licenseDocumentName}`}
-                  />
-                  <div className="flex flex-wrap gap-2">
-                    <Button type="button" variant="outline" disabled={isSubmitting} onClick={() => setCameraTarget({ side: 'front', documentName: `your ${licenseDocumentName}`, filePrefix: 'provider-license' })} className="h-9 gap-2 px-3 text-xs"><Camera size={14} />Take photo</Button>
-                    <Button type="button" variant="outline" disabled={isSubmitting} onClick={() => licenseFileInput.current?.click()} className="h-9 gap-2 px-3 text-xs"><FileImage size={14} />Choose photo</Button>
-                  </div>
-                </fieldset>
-                <label className="flex items-start gap-3 text-xs leading-5 text-slate-600">
-                  <input type="checkbox" checked={licenseConsent} disabled={isSubmitting} onChange={(event) => setLicenseConsent(event.target.checked)} className="mt-1 accent-brand-green" />
-                  <span>I confirm this is a photo of my {licenseDocumentName} and consent to NHFAS storing it privately for verification.</span>
-                </label>
-              </section>
-            )}
-
-=======
->>>>>>> 63efae11eb35be3f953ce9543bf7d62b50b2b908
             <div className="space-y-2">
               <label className="text-sm font-medium text-slate-700 block">Full Name</label>
               <div className="relative">
@@ -394,21 +128,6 @@ const SignUp = () => {
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 />
               </div>
-<<<<<<< HEAD
-              {cameraTarget && (
-                <IdentityCameraCapture
-                  side={cameraTarget.side}
-                  documentName={cameraTarget.documentName}
-                  filePrefix={cameraTarget.filePrefix}
-                  onCapture={(photo) => {
-                    if (cameraTarget.filePrefix === 'provider-license') setProviderLicensePhoto(photo);
-                    else setIdentityPhotos((current) => ({ ...current, [cameraTarget.side]: photo }));
-                  }}
-                  onClose={() => setCameraTarget(null)}
-                />
-              )}
-=======
->>>>>>> 63efae11eb35be3f953ce9543bf7d62b50b2b908
             </div>
 
             <div className="space-y-2">
@@ -448,17 +167,8 @@ const SignUp = () => {
             {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
             {message && <p className="text-sm text-brand-green" role="status">{message}</p>}
 
-<<<<<<< HEAD
-            <Button variant="primary" className="w-full flex justify-center items-center gap-2 py-3" type="submit" disabled={isSubmitting || confirmationPending}>
-              {isSubmitting
-                ? <><LoaderCircle className="h-4 w-4 animate-spin" />{createdUserId ? 'Submitting verification photos...' : 'Creating account...'}</>
-                : createdUserId
-                  ? <><FileText className="h-4 w-4" />Retry verification submission</>
-                  : <>Create Account <ArrowRight className="w-4 h-4" /></>}
-=======
             <Button variant="primary" className="w-full flex justify-center items-center gap-2 py-3" type="submit" disabled={isSubmitting}>
               {isSubmitting ? 'Creating account...' : 'Create Account'} <ArrowRight className="w-4 h-4" />
->>>>>>> 63efae11eb35be3f953ce9543bf7d62b50b2b908
             </Button>
           </form>
 

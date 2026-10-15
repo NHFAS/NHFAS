@@ -15,6 +15,8 @@ import SearchResults from './pages/SearchResults';
 import Login from './pages/Login';
 import SignUp from './pages/SignUp';
 import FindMe from './pages/FindMe';
+import Verification from './pages/Verification';
+import VerificationQueue from './pages/VerificationQueue';
 
 function App() {
   const [loading, setLoading] = useState(true);
@@ -98,6 +100,8 @@ function App() {
           <Route path="find-me" element={<FindMe />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="search" element={<SearchResults />} />
+          <Route path="verification" element={<Verification />} />
+          <Route path="admin/verifications" element={<VerificationQueue />} />
         </Route>
         <Route path="*" element={<NotFound />} />
       </Routes>

@@ -54,7 +54,7 @@ const Footer = () => {
 
         <div className="border-t border-slate-800 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
           <p className="text-slate-500 text-sm text-center md:text-left">
-            &copy; {new Date().getFullYear()} HandiCraft & HeavyHaul. All rights reserved.
+            &copy; {new Date().getFullYear()} NHFAS. All rights reserved.
           </p>
           <div className="flex items-center space-x-4 text-sm text-slate-400">
             <a href="https://www.facebook.com/profile.php?id=61594481709392" target="_blank" rel="noopener noreferrer" className="p-2 bg-slate-800 rounded-full hover:bg-brand-green hover:text-white transition-colors" aria-label="Facebook">

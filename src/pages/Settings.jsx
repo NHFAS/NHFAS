@@ -3,55 +3,6 @@ import { Link, useNavigate, useOutletContext } from 'react-router-dom';
 import { Check, LogOut, Save, ShieldCheck } from 'lucide-react';
 import { Button } from '../components/Button';
 import { supabase } from '../lib/supabase';
-<<<<<<< HEAD
-import {
-  submitIdentityVerification,
-  submitProviderLicenseVerification,
-  validateProviderLicensePhoto,
-} from '../lib/submitIdentityVerification';
-import IdentityCameraCapture from '../components/IdentityCameraCapture';
-
-const Settings = () => {
-  const [user, setUser] = useState(null);
-  const [role, setRole] = useState('client');
-  const [profile, setProfile] = useState({ full_name: '', phone: '', preferred_language: 'en', low_literacy_mode: false });
-  const [verification, setVerification] = useState(null);
-  const [licenseVerification, setLicenseVerification] = useState(null);
-  const [kycStatus, setKycStatus] = useState('pending');
-  const [vehicles, setVehicles] = useState([]);
-  const [vehicleClasses, setVehicleClasses] = useState([]);
-  const [maintenance, setMaintenance] = useState([]);
-  const [vehicleForm, setVehicleForm] = useState({ plate_number: '', make: '', model: '', vehicle_class_id: '', rated_payload_kg: '' });
-  const [maintenanceForm, setMaintenanceForm] = useState({ vehicle_id: '', maintenance_type: '', description: '', scheduled_at: '', cost: '' });
-  const [identityPhotos, setIdentityPhotos] = useState({ front: null, back: null });
-  const [identityConsent, setIdentityConsent] = useState(false);
-  const [licensePhoto, setLicensePhoto] = useState(null);
-  const [licenseConsent, setLicenseConsent] = useState(false);
-  const fileInputs = useRef({});
-  const licenseFileInput = useRef(null);
-  const [cameraTarget, setCameraTarget] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState('');
-  const [error, setError] = useState('');
-  const licenseDocumentName = 'driving license';
-
-  const loadFleet = async (currentUser) => {
-    const { data: vehicleData } = await supabase.from('vehicles')
-      .select('id, plate_number, make, model, rated_payload_kg, status, vehicle_classes(name, rated_payload_kg)')
-      .eq('owner_id', currentUser.id)
-      .order('created_at', { ascending: false });
-    const list = vehicleData || [];
-    setVehicles(list);
-    if (list.length) {
-      const { data: records } = await supabase.from('vehicle_maintenance_records')
-        .select('*').in('vehicle_id', list.map((vehicle) => vehicle.id)).order('scheduled_at', { ascending: true });
-      setMaintenance(records || []);
-    } else {
-      setMaintenance([]);
-    }
-  };
-=======
 
 const SettingsPage = () => {
   const navigate = useNavigate();
@@ -67,7 +18,6 @@ const SettingsPage = () => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isChangingPassword, setIsChangingPassword] = useState(false);
->>>>>>> 63efae11eb35be3f953ce9543bf7d62b50b2b908
 
   useEffect(() => {
     if (!profile) return;
@@ -79,89 +29,12 @@ const SettingsPage = () => {
     });
   }, [profile]);
 
-<<<<<<< HEAD
-      if (['service_provider', 'heavy_operator'].includes(profileData?.role)) {
-        const [{ data: verificationData }, { data: licenseData }, { data: providerData }] = await Promise.all([
-          supabase.from('provider_verifications').select('status, document_url, created_at, notes, expires_at')
-            .eq('provider_id', currentUser.id).eq('verification_type', 'identity').maybeSingle(),
-          supabase.from('provider_verifications').select('status, document_url, created_at, notes, expires_at')
-            .eq('provider_id', currentUser.id).eq('verification_type', 'license').maybeSingle(),
-          supabase.from('provider_profiles').select('kyc_status').eq('user_id', currentUser.id).maybeSingle(),
-        ]);
-        if (mounted) {
-          setVerification(verificationData);
-          setLicenseVerification(licenseData);
-          setKycStatus(providerData?.kyc_status || 'pending');
-        }
-      }
-      if (profileData?.role === 'heavy_operator' && mounted) await loadFleet(currentUser);
-      if (mounted) setLoading(false);
-    };
-    load();
-    return () => { mounted = false; };
-  }, []);
-
-  const saveProfile = async (event) => {
-=======
   const handleSaveProfile = async (event) => {
->>>>>>> 63efae11eb35be3f953ce9543bf7d62b50b2b908
     event.preventDefault();
     setFeedback({ type: '', message: '' });
 
-<<<<<<< HEAD
-  const submitLicenseVerification = async (event) => {
-    event.preventDefault();
-    if (!user || !licenseConsent) return;
-    const photoError = validateProviderLicensePhoto(licensePhoto);
-    if (photoError) {
-      setError(photoError);
-      return;
-    }
-    setSaving(true);
-    setError('');
-    setMessage('');
-    try {
-      const data = await submitProviderLicenseVerification(supabase, user.id, licensePhoto);
-      setLicenseVerification(data);
-      setMessage(`Your ${licenseDocumentName} photo was submitted for review.`);
-      setLicensePhoto(null);
-      setLicenseConsent(false);
-      if (licenseFileInput.current) licenseFileInput.current.value = '';
-    } catch (submitError) {
-      setError(submitError.message);
-    }
-    setSaving(false);
-  };
-
-  const submitVerification = async (event) => {
-    event.preventDefault();
-    if (!identityPhotos.front || !identityPhotos.back || !user || !identityConsent) return;
-    setSaving(true);
-    setError('');
-    setMessage('');
-    try {
-      const data = await submitIdentityVerification(supabase, user.id, identityPhotos);
-      setVerification(data);
-      setMessage('Both sides of your Fayda ID were submitted for review.');
-      setIdentityPhotos({ front: null, back: null });
-      setIdentityConsent(false);
-      Object.values(fileInputs.current).forEach((input) => { if (input) input.value = ''; });
-    } catch (submitError) {
-      setError(submitError.message);
-    }
-    setSaving(false);
-  };
-
-  const addVehicle = async (event) => {
-    event.preventDefault();
-    const selectedClass = vehicleClasses.find((item) => item.id === vehicleForm.vehicle_class_id);
-    const payload = Number(vehicleForm.rated_payload_kg || selectedClass?.rated_payload_kg);
-    if (!selectedClass || payload > selectedClass.rated_payload_kg) {
-      setError('Rated payload cannot exceed the vehicle class payload limit.');
-=======
     if (!user) {
       setFeedback({ type: 'error', message: 'Sign in before updating your profile.' });
->>>>>>> 63efae11eb35be3f953ce9543bf7d62b50b2b908
       return;
     }
 
@@ -333,119 +206,6 @@ const SettingsPage = () => {
         </form>
       </section>
 
-<<<<<<< HEAD
-      {['service_provider', 'heavy_operator'].includes(role) && (
-        <section className="border-b border-slate-200 pb-8">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-bold text-brand-navy">Identity verification</h2>
-              <p className="mt-1 max-w-xl text-sm leading-6 text-slate-600">Providers must be approved before accepting jobs. Photos stay in private storage and are visible only to you and platform administrators.</p>
-            </div>
-            <span className="inline-flex items-center gap-2 bg-slate-100 px-3 py-2 text-sm font-semibold capitalize text-slate-700"><ShieldCheck size={17} />{verification?.status || kycStatus}</span>
-          </div>
-          {verification ? (
-            <div className="mt-4 flex items-start gap-3 border-l-2 border-slate-300 py-1 pl-4 text-sm text-slate-600">
-              <FileText size={18} className="mt-0.5 shrink-0" />
-              <div><p>Fayda ID photos submitted {new Date(verification.created_at).toLocaleDateString()}</p>{verification.notes && <p className="mt-1">Review note: {verification.notes}</p>}{verification.expires_at && <p className="mt-1">Expires: {new Date(verification.expires_at).toLocaleDateString()}</p>}</div>
-            </div>
-          ) : (
-            <form onSubmit={submitVerification} className="mt-4 space-y-4">
-              <p className="text-sm text-slate-600">Take clear, readable photos of the front and back of your Fayda ID. JPG and PNG images up to 10 MB each are accepted.</p>
-              <div className="grid gap-4 sm:grid-cols-2">
-                {['front', 'back'].map((side) => (
-                  <fieldset key={side} className="space-y-3 rounded-xl border border-slate-200 p-4">
-                    <legend className="px-1 text-sm font-semibold capitalize text-brand-navy">{side} of ID</legend>
-                    <p className="truncate text-sm text-slate-500">{identityPhotos[side]?.name || 'No photo selected'}</p>
-                    <input
-                      ref={(input) => { fileInputs.current[side] = input; }}
-                      type="file"
-                      accept="image/jpeg,image/png"
-                      onChange={(event) => {
-                        setIdentityPhotos((current) => ({ ...current, [side]: event.target.files?.[0] || null }));
-                        event.target.value = '';
-                      }}
-                      className="sr-only"
-                      aria-label={`Choose a photo of the ${side} of your Fayda ID`}
-                    />
-                    <div className="flex flex-wrap gap-2">
-                      <Button type="button" variant="outline" disabled={saving} onClick={() => setCameraTarget({ side, documentName: 'Fayda ID', filePrefix: 'fayda' })} className="h-9 gap-2 px-3 text-sm"><Camera size={15} />Take photo</Button>
-                      <Button type="button" variant="outline" disabled={saving} onClick={() => fileInputs.current[side]?.click()} className="h-9 gap-2 px-3 text-sm"><FileImage size={15} />Choose photo</Button>
-                    </div>
-                  </fieldset>
-                ))}
-              </div>
-              <label className="flex items-start gap-3 text-sm leading-5 text-slate-600">
-                <input type="checkbox" checked={identityConsent} onChange={(event) => setIdentityConsent(event.target.checked)} className="mt-1 accent-brand-green" />
-                <span>I confirm these are photos of my Fayda ID and consent to NHFAS storing them privately for identity verification.</span>
-              </label>
-              <Button type="submit" disabled={saving || !identityPhotos.front || !identityPhotos.back || !identityConsent} className="gap-2 self-start">
-                {saving ? <LoaderCircle size={16} className="animate-spin" /> : <FileText size={16} />}
-                {saving ? 'Submitting photos...' : 'Submit for review'}
-              </Button>
-            </form>
-          )}
-        </section>
-      )}
-
-      {role === 'heavy_operator' && (
-        <section className="border-b border-slate-200 pb-8">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-bold capitalize text-brand-navy">{licenseDocumentName}</h2>
-              <p className="mt-1 max-w-xl text-sm leading-6 text-slate-600">Submit a clear photo of your {licenseDocumentName} for verification. JPG and PNG images up to 10 MB are accepted.</p>
-            </div>
-            {licenseVerification && (
-              <span className="inline-flex items-center gap-2 bg-slate-100 px-3 py-2 text-sm font-semibold capitalize text-slate-700">
-                <ShieldCheck size={17} />{licenseVerification.status}
-              </span>
-            )}
-          </div>
-          {licenseVerification ? (
-            <div className="mt-4 flex items-start gap-3 border-l-2 border-slate-300 py-1 pl-4 text-sm text-slate-600">
-              <FileText size={18} className="mt-0.5 shrink-0" />
-              <div>
-                <p>{licenseDocumentName} photo submitted {new Date(licenseVerification.created_at).toLocaleDateString()}</p>
-                {licenseVerification.notes && <p className="mt-1">Review note: {licenseVerification.notes}</p>}
-              </div>
-            </div>
-          ) : (
-            <form onSubmit={submitLicenseVerification} className="mt-4 space-y-4">
-              <fieldset className="space-y-3 rounded-xl border border-slate-200 p-4">
-                <legend className="px-1 text-sm font-semibold capitalize text-brand-navy">{licenseDocumentName} photo</legend>
-                <p className="truncate text-sm text-slate-500">{licensePhoto?.name || 'No photo selected'}</p>
-                <input
-                  ref={licenseFileInput}
-                  type="file"
-                  accept="image/jpeg,image/png"
-                  disabled={saving}
-                  onChange={(event) => {
-                    setLicensePhoto(event.target.files?.[0] || null);
-                    event.target.value = '';
-                  }}
-                  className="sr-only"
-                  aria-label={`Choose a photo of your ${licenseDocumentName}`}
-                />
-                <div className="flex flex-wrap gap-2">
-                  <Button type="button" variant="outline" disabled={saving} onClick={() => setCameraTarget({ side: 'front', documentName: `your ${licenseDocumentName}`, filePrefix: 'provider-license' })} className="h-9 gap-2 px-3 text-sm"><Camera size={15} />Take photo</Button>
-                  <Button type="button" variant="outline" disabled={saving} onClick={() => licenseFileInput.current?.click()} className="h-9 gap-2 px-3 text-sm"><FileImage size={15} />Choose photo</Button>
-                </div>
-              </fieldset>
-              <label className="flex items-start gap-3 text-sm leading-5 text-slate-600">
-                <input type="checkbox" checked={licenseConsent} disabled={saving} onChange={(event) => setLicenseConsent(event.target.checked)} className="mt-1 accent-brand-green" />
-                <span>I confirm this is a photo of my {licenseDocumentName} and consent to NHFAS storing it privately for verification.</span>
-              </label>
-              <Button type="submit" disabled={saving || !licensePhoto || !licenseConsent} className="gap-2 self-start">
-                {saving ? <LoaderCircle size={16} className="animate-spin" /> : <FileText size={16} />}
-                {saving ? 'Submitting photo...' : 'Submit for review'}
-              </Button>
-            </form>
-          )}
-        </section>
-      )}
-
-      {role === 'heavy_operator' && (
-        <section className="space-y-6 border-b border-slate-200 pb-8">
-=======
       <section aria-labelledby="workspace-settings-heading" className="rounded-lg border border-slate-200 bg-white p-5 sm:p-7">
         <div>
           <h2 id="workspace-settings-heading" className="text-lg font-bold text-brand-navy">Dashboard workspace</h2>
@@ -476,7 +236,6 @@ const SettingsPage = () => {
           <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-sky-50 text-sky-700">
             <ShieldCheck className="h-5 w-5" />
           </span>
->>>>>>> 63efae11eb35be3f953ce9543bf7d62b50b2b908
           <div>
             <h2 id="security-settings-heading" className="text-lg font-bold text-brand-navy">Account security</h2>
             <p className="mt-1 text-sm text-slate-500">Update your password or sign out of this device.</p>
@@ -517,41 +276,8 @@ const SettingsPage = () => {
               <ShieldCheck className="h-4 w-4" />
             </Button>
           </div>
-<<<<<<< HEAD
-
-          <div>
-            <h3 className="text-base font-bold text-brand-navy">Maintenance schedule</h3>
-            <form onSubmit={addMaintenance} className="mt-3 grid gap-3 md:grid-cols-2">
-              <label className="space-y-1 text-sm font-medium text-slate-700">Vehicle<select required value={maintenanceForm.vehicle_id} onChange={(event) => setMaintenanceForm({ ...maintenanceForm, vehicle_id: event.target.value })} className="w-full border border-slate-300 bg-white px-3 py-2.5 font-normal"><option value="">Choose a vehicle</option>{vehicles.map((item) => <option key={item.id} value={item.id}>{item.plate_number}</option>)}</select></label>
-              <label className="space-y-1 text-sm font-medium text-slate-700">Maintenance type<input required value={maintenanceForm.maintenance_type} onChange={(event) => setMaintenanceForm({ ...maintenanceForm, maintenance_type: event.target.value })} className="w-full border border-slate-300 bg-white px-3 py-2.5 font-normal" placeholder="Inspection, tires, engine service" /></label>
-              <label className="space-y-1 text-sm font-medium text-slate-700">Scheduled for<input type="date" value={maintenanceForm.scheduled_at} onChange={(event) => setMaintenanceForm({ ...maintenanceForm, scheduled_at: event.target.value })} className="w-full border border-slate-300 bg-white px-3 py-2.5 font-normal" /></label>
-              <label className="space-y-1 text-sm font-medium text-slate-700">Estimated cost (ETB)<input type="number" min="0" value={maintenanceForm.cost} onChange={(event) => setMaintenanceForm({ ...maintenanceForm, cost: event.target.value })} className="w-full border border-slate-300 bg-white px-3 py-2.5 font-normal" /></label>
-              <label className="space-y-1 text-sm font-medium text-slate-700 md:col-span-2">Notes<input value={maintenanceForm.description} onChange={(event) => setMaintenanceForm({ ...maintenanceForm, description: event.target.value })} className="w-full border border-slate-300 bg-white px-3 py-2.5 font-normal" /></label>
-              <Button type="submit" disabled={saving || !vehicles.length} className="gap-2 self-start"><Plus size={16} />Schedule maintenance</Button>
-            </form>
-            <div className="mt-4 divide-y divide-slate-200 border-y border-slate-200">
-              {maintenance.map((record) => <div key={record.id} className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm"><div><p className="font-semibold text-brand-navy">{vehicles.find((vehicle) => vehicle.id === record.vehicle_id)?.plate_number} · {record.maintenance_type}</p><p className="mt-1 text-slate-500">{record.scheduled_at ? new Date(record.scheduled_at).toLocaleDateString() : 'Date not set'} · {record.status}</p></div>{record.status !== 'completed' && <Button variant="outline" onClick={() => completeMaintenance(record)} className="h-9 gap-2 px-3 text-xs"><Check size={14} />Mark complete</Button>}</div>)}
-              {!maintenance.length && <p className="py-4 text-sm text-slate-500">No maintenance records yet.</p>}
-            </div>
-          </div>
-        </section>
-      )}
-      {cameraTarget && (
-        <IdentityCameraCapture
-          side={cameraTarget.side}
-          documentName={cameraTarget.documentName}
-          filePrefix={cameraTarget.filePrefix}
-          onCapture={(photo) => {
-            if (cameraTarget.filePrefix === 'provider-license') setLicensePhoto(photo);
-            else setIdentityPhotos((current) => ({ ...current, [cameraTarget.side]: photo }));
-          }}
-          onClose={() => setCameraTarget(null)}
-        />
-      )}
-=======
         </form>
       </section>
->>>>>>> 63efae11eb35be3f953ce9543bf7d62b50b2b908
     </div>
   );
 };

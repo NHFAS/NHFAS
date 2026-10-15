@@ -34,12 +34,16 @@ const uploadVerificationDocument = async (supabase, userId, verificationType, fi
 
   if (uploadError) throw new Error(uploadError.message);
 
-  const { data, error: submitError } = await supabase.from('provider_verifications').insert({
+  const { data, error: submitError } = await supabase.from('provider_verifications').upsert({
     provider_id: userId,
     verification_type: verificationType,
     document_url: documentPath,
     status: 'pending',
-  }).select('status, document_url, created_at, notes, expires_at').single();
+    notes: null,
+    reviewed_by: null,
+    reviewed_at: null,
+    expires_at: null,
+  }, { onConflict: 'provider_id,verification_type' }).select('status, document_url, created_at, notes, expires_at').single();
 
   if (submitError) {
     const { error: cleanupError } = await storage.remove([documentPath]);
@@ -83,12 +87,16 @@ export const submitIdentityVerification = async (supabase, userId, photos) => {
     uploadedPaths.push(documentPath);
   }
 
-  const { data, error: submitError } = await supabase.from('provider_verifications').insert({
+  const { data, error: submitError } = await supabase.from('provider_verifications').upsert({
     provider_id: userId,
     verification_type: 'identity',
     document_url: JSON.stringify(documentPaths),
     status: 'pending',
-  }).select('status, document_url, created_at, notes, expires_at').single();
+    notes: null,
+    reviewed_by: null,
+    reviewed_at: null,
+    expires_at: null,
+  }, { onConflict: 'provider_id,verification_type' }).select('status, document_url, created_at, notes, expires_at').single();
 
   if (submitError) {
     const { error: cleanupError } = await storage.remove(uploadedPaths);
