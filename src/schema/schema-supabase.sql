@@ -53,6 +53,7 @@ end $$;
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   full_name text not null,
+  email text,
   phone text,
   role public.user_role not null default 'client',
   status public.account_status not null default 'pending',
@@ -63,6 +64,14 @@ create table if not exists public.profiles (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- Admin dashboard needs each user's email; profiles created before this
+-- column existed are backfilled from auth.users below.
+alter table public.profiles add column if not exists email text;
+update public.profiles p
+set email = u.email
+from auth.users u
+where p.id = u.id and p.email is distinct from u.email and u.email is not null;
 
 create table if not exists public.organizations (
   id uuid primary key default gen_random_uuid(),
@@ -111,6 +120,12 @@ create table if not exists public.provider_profiles (
   updated_at timestamptz not null default now()
 );
 
+-- Last known live location for provider discovery ("Find Me" toggle and,
+-- later, real-time GPS tracking of active jobs — SRS FR-04).
+alter table public.provider_profiles add column if not exists last_latitude numeric(9,6);
+alter table public.provider_profiles add column if not exists last_longitude numeric(9,6);
+alter table public.provider_profiles add column if not exists last_location_at timestamptz;
+
 create table if not exists public.vehicle_classes (
   id uuid primary key default gen_random_uuid(),
   code text not null unique,
@@ -153,6 +168,7 @@ create table if not exists public.jobs (
   job_type public.job_type not null,
   booking_mode public.booking_mode not null default 'quote',
   status public.job_status not null default 'draft',
+  availability_status text not null default 'available' check (availability_status in ('available', 'unavailable')),
   title text not null,
   description text,
   service_address text,
@@ -169,8 +185,13 @@ create table if not exists public.jobs (
   check (scheduled_end is null or scheduled_start is null or scheduled_end >= scheduled_start)
 );
 
+alter table public.jobs
+  add column if not exists availability_status text not null default 'available'
+    check (availability_status in ('available', 'unavailable'));
+
 create index if not exists jobs_client_idx on public.jobs (client_id, created_at desc);
 create index if not exists jobs_status_idx on public.jobs (status, created_at desc);
+create index if not exists jobs_availability_idx on public.jobs (availability_status, status);
 create index if not exists jobs_provider_idx on public.jobs (provider_id, status);
 create index if not exists jobs_operator_idx on public.jobs (operator_id, status);
 
@@ -658,10 +679,11 @@ begin
     else 'client'::public.user_role
   end;
 
-  insert into public.profiles (id, full_name, phone, role)
+  insert into public.profiles (id, full_name, email, phone, role)
   values (
     new.id,
     coalesce(new.raw_user_meta_data ->> 'full_name', split_part(coalesce(new.email, 'NHFAS user'), '@', 1)),
+    new.email,
     new.phone,
     new_role
   );
@@ -777,6 +799,7 @@ select public.drop_policy_if_exists('escrow_releases', 'releases_participant');
 select public.drop_policy_if_exists('conversations', 'conversations_member');
 select public.drop_policy_if_exists('conversation_members', 'conversation_members_member');
 select public.drop_policy_if_exists('messages', 'messages_member');
+select public.drop_policy_if_exists('messages', 'messages_insert_member');
 select public.drop_policy_if_exists('disputes', 'disputes_participant');
 select public.drop_policy_if_exists('insurance_policies', 'insurance_participant');
 select public.drop_policy_if_exists('insurance_claims', 'claims_participant');
@@ -790,32 +813,95 @@ select public.drop_policy_if_exists('sustainability_records', 'sustainability_pa
 select public.drop_policy_if_exists('auction_listings', 'auction_listings_insert_owner');
 select public.drop_policy_if_exists('auction_bids', 'auction_bids_insert_owner');
 select public.drop_policy_if_exists('safety_incidents', 'safety_incidents_insert_reporter');
+select public.drop_policy_if_exists('safety_incidents', 'safety_incidents_admin_update');
+select public.drop_policy_if_exists('job_status_history', 'job_history_insert_participant');
 select public.drop_policy_if_exists('messages', 'messages_insert_member');
 select public.drop_policy_if_exists('payout_accounts', 'payout_accounts_manage_owner');
+
+-- Security-definer membership checks avoid recursive RLS evaluation when a
+-- policy needs to inspect organization_members itself.
+create or replace function public.is_organization_member(target_organization_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+set row_security = off
+as $$
+  select exists (
+    select 1
+    from public.organization_members m
+    where m.organization_id = target_organization_id
+      and m.user_id = auth.uid()
+  );
+$$;
+
+create or replace function public.is_organization_manager(target_organization_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+set row_security = off
+as $$
+  select exists (
+    select 1
+    from public.organization_members m
+    where m.organization_id = target_organization_id
+      and m.user_id = auth.uid()
+      and m.member_role in ('owner', 'manager')
+  );
+$$;
+
+revoke all on function public.is_organization_member(uuid) from public;
+revoke all on function public.is_organization_manager(uuid) from public;
+grant execute on function public.is_organization_member(uuid) to authenticated;
+grant execute on function public.is_organization_manager(uuid) to authenticated;
+
+-- Membership checks used by chat policies must not re-enter conversation_members RLS.
+create or replace function public.is_conversation_member(target_conversation_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+set row_security = off
+as $$
+  select exists (
+    select 1
+    from public.conversation_members m
+    where m.conversation_id = target_conversation_id
+      and m.user_id = auth.uid()
+  );
+$$;
+
+revoke all on function public.is_conversation_member(uuid) from public;
+grant execute on function public.is_conversation_member(uuid) to authenticated;
+
+-- Administrator check used by moderation policies below. Defined before the
+-- policy block so a fresh database can create jobs_select_participant
+-- (which references it) without hitting a missing-function error.
+create or replace function public.is_admin()
+returns boolean language sql stable security definer set search_path = public
+as $$
+  select exists (
+    select 1 from public.profiles where id = auth.uid() and role = 'admin'
+  );
+$$;
 
 create policy profiles_select on public.profiles for select to authenticated using (true);
 create policy profiles_update_own on public.profiles for update to authenticated
 using (id = auth.uid()) with check (id = auth.uid());
 
 create policy organizations_members_select on public.organizations for select to authenticated
-using (created_by = auth.uid() or exists (
-  select 1 from public.organization_members m
-  where m.organization_id = organizations.id and m.user_id = auth.uid()
-));
+using (created_by = auth.uid() or public.is_organization_member(organizations.id));
 create policy organizations_insert_own on public.organizations for insert to authenticated
 with check (created_by = auth.uid());
 
 create policy organization_members_select on public.organization_members for select to authenticated
-using (user_id = auth.uid() or exists (
-  select 1 from public.organization_members m
-  where m.organization_id = organization_members.organization_id and m.user_id = auth.uid()
-));
+using (user_id = auth.uid() or public.is_organization_member(organization_members.organization_id));
 create policy organization_members_insert_manager on public.organization_members for insert to authenticated
-with check (exists (
-  select 1 from public.organization_members m
-  where m.organization_id = organization_members.organization_id
-    and m.user_id = auth.uid() and m.member_role in ('owner', 'manager')
-));
+with check (public.is_organization_manager(organization_members.organization_id));
 
 create policy provider_profiles_public_select on public.provider_profiles for select to authenticated
 using (is_searchable = true or user_id = auth.uid());
@@ -823,16 +909,16 @@ create policy provider_profiles_manage_own on public.provider_profiles for all t
 using (user_id = auth.uid()) with check (user_id = auth.uid());
 
 create policy vehicles_select_related on public.vehicles for select to authenticated
-using (owner_id = auth.uid() or exists (
-  select 1 from public.organization_members m
-  where m.organization_id = vehicles.organization_id and m.user_id = auth.uid()
-));
+using (owner_id = auth.uid() or public.is_organization_member(vehicles.organization_id));
 create policy vehicles_manage_owner on public.vehicles for all to authenticated
 using (owner_id = auth.uid()) with check (owner_id = auth.uid());
 
+drop policy if exists jobs_select_participant on public.jobs;
 create policy jobs_select_participant on public.jobs for select to authenticated
-using (client_id = auth.uid() or provider_id = auth.uid() or operator_id = auth.uid()
-  or organization_id in (select organization_id from public.organization_members where user_id = auth.uid())
+using (
+  client_id = auth.uid() or provider_id = auth.uid() or operator_id = auth.uid()
+  or public.is_organization_member(organization_id)
+  or public.is_admin()
   or status in ('posted', 'matching'));
 create policy jobs_insert_client on public.jobs for insert to authenticated
 with check (client_id = auth.uid());
@@ -854,6 +940,8 @@ using (provider_id = auth.uid() or operator_id = auth.uid() or exists (
 create policy job_history_participant on public.job_status_history for select to authenticated
 using (exists (select 1 from public.jobs j where j.id = job_status_history.job_id
   and (j.client_id = auth.uid() or j.provider_id = auth.uid() or j.operator_id = auth.uid())));
+create policy job_history_insert_participant on public.job_status_history for insert to authenticated
+with check (public.is_job_participant(job_id));
 
 create policy cargo_participant on public.cargo_specifications for all to authenticated
 using (exists (select 1 from public.jobs j where j.id = cargo_specifications.job_id
@@ -889,16 +977,7 @@ as $$
   select exists (
     select 1 from public.vehicles v
     where v.id = target_vehicle_id and (v.owner_id = auth.uid()
-      or exists (select 1 from public.organization_members m
-        where m.organization_id = v.organization_id and m.user_id = auth.uid()))
-  );
-$$;
-
-create or replace function public.is_admin()
-returns boolean language sql stable security definer set search_path = public
-as $$
-  select exists (
-    select 1 from public.profiles where id = auth.uid() and role = 'admin'
+    or public.is_organization_member(v.organization_id))
   );
 $$;
 
@@ -959,9 +1038,11 @@ create policy regulatory_permits_participant on public.regulatory_permits for al
 using (public.is_job_participant(job_id) or public.is_admin())
 with check (public.is_job_participant(job_id) or public.is_admin());
 create policy safety_incidents_participant on public.safety_incidents for select to authenticated
-using (reporter_id = auth.uid() or public.is_job_participant(job_id));
+using (reporter_id = auth.uid() or public.is_job_participant(job_id) or public.is_admin());
 create policy safety_incidents_insert_reporter on public.safety_incidents for insert to authenticated
 with check (reporter_id = auth.uid());
+create policy safety_incidents_admin_update on public.safety_incidents for update to authenticated
+using (public.is_admin()) with check (public.is_admin());
 create policy auction_listings_authenticated on public.auction_listings for select to authenticated using (true);
 create policy auction_listings_insert_owner on public.auction_listings for insert to authenticated
 with check (seller_id = auth.uid());
@@ -995,13 +1076,13 @@ create policy releases_participant on public.escrow_releases for select to authe
 using (exists (select 1 from public.escrow_milestones m join public.escrow_accounts e on e.id = m.escrow_id
   where m.id = milestone_id and (e.payer_id = auth.uid() or e.payee_id = auth.uid())));
 create policy conversations_member on public.conversations for select to authenticated
-using (exists (select 1 from public.conversation_members m where m.conversation_id = conversations.id and m.user_id = auth.uid()));
+using (public.is_conversation_member(conversations.id));
 create policy conversation_members_member on public.conversation_members for select to authenticated
-using (user_id = auth.uid() or exists (select 1 from public.conversation_members m where m.conversation_id = conversation_members.conversation_id and m.user_id = auth.uid()));
+using (user_id = auth.uid() or public.is_conversation_member(conversation_members.conversation_id));
 create policy messages_member on public.messages for select to authenticated
-using (exists (select 1 from public.conversation_members m where m.conversation_id = messages.conversation_id and m.user_id = auth.uid()));
+using (public.is_conversation_member(messages.conversation_id));
 create policy messages_insert_member on public.messages for insert to authenticated
-with check (sender_id = auth.uid() and exists (select 1 from public.conversation_members m where m.conversation_id = messages.conversation_id and m.user_id = auth.uid()));
+with check (sender_id = auth.uid() and public.is_conversation_member(messages.conversation_id));
 create policy disputes_participant on public.disputes for all to authenticated
 using (opened_by = auth.uid() or public.is_job_participant(job_id)) with check (opened_by = auth.uid());
 create policy insurance_participant on public.insurance_policies for select to authenticated
@@ -1023,7 +1104,114 @@ using (apprentice_id = auth.uid() or mentor_id = auth.uid());
 create policy sustainability_participant on public.sustainability_records for select to authenticated
 using (public.is_job_participant(job_id) or public.is_vehicle_owner(vehicle_id));
 
+-- ---------------------------------------------------------------------
+-- Admin dashboard oversight: admins read every operational table and
+-- moderate the records listed in the second block below. Dropped first
+-- so the whole section stays idempotent on re-runs.
+-- ---------------------------------------------------------------------
+select public.drop_policy_if_exists('organizations', 'organizations_admin_select');
+create policy organizations_admin_select on public.organizations for select to authenticated using (public.is_admin());
+select public.drop_policy_if_exists('organization_members', 'organization_members_admin_select');
+create policy organization_members_admin_select on public.organization_members for select to authenticated using (public.is_admin());
+select public.drop_policy_if_exists('provider_profiles', 'provider_profiles_admin_select');
+create policy provider_profiles_admin_select on public.provider_profiles for select to authenticated using (public.is_admin());
+select public.drop_policy_if_exists('vehicles', 'vehicles_admin_select');
+create policy vehicles_admin_select on public.vehicles for select to authenticated using (public.is_admin());
+select public.drop_policy_if_exists('job_stops', 'job_stops_admin_select');
+create policy job_stops_admin_select on public.job_stops for select to authenticated using (public.is_admin());
+select public.drop_policy_if_exists('dispatch_offers', 'dispatch_offers_admin_select');
+create policy dispatch_offers_admin_select on public.dispatch_offers for select to authenticated using (public.is_admin());
+select public.drop_policy_if_exists('job_status_history', 'job_status_history_admin_select');
+create policy job_status_history_admin_select on public.job_status_history for select to authenticated using (public.is_admin());
+select public.drop_policy_if_exists('cargo_specifications', 'cargo_specifications_admin_select');
+create policy cargo_specifications_admin_select on public.cargo_specifications for select to authenticated using (public.is_admin());
+select public.drop_policy_if_exists('payments', 'payments_admin_select');
+create policy payments_admin_select on public.payments for select to authenticated using (public.is_admin());
+select public.drop_policy_if_exists('ratings', 'ratings_admin_select');
+create policy ratings_admin_select on public.ratings for select to authenticated using (public.is_admin());
+select public.drop_policy_if_exists('auction_bids', 'auction_bids_admin_select');
+create policy auction_bids_admin_select on public.auction_bids for select to authenticated using (public.is_admin());
+select public.drop_policy_if_exists('job_quotes', 'job_quotes_admin_select');
+create policy job_quotes_admin_select on public.job_quotes for select to authenticated using (public.is_admin());
+select public.drop_policy_if_exists('job_tracking_points', 'job_tracking_points_admin_select');
+create policy job_tracking_points_admin_select on public.job_tracking_points for select to authenticated using (public.is_admin());
+select public.drop_policy_if_exists('route_plans', 'route_plans_admin_select');
+create policy route_plans_admin_select on public.route_plans for select to authenticated using (public.is_admin());
+select public.drop_policy_if_exists('vehicle_maintenance_records', 'vehicle_maintenance_records_admin_select');
+create policy vehicle_maintenance_records_admin_select on public.vehicle_maintenance_records for select to authenticated using (public.is_admin());
+select public.drop_policy_if_exists('telematics_events', 'telematics_events_admin_select');
+create policy telematics_events_admin_select on public.telematics_events for select to authenticated using (public.is_admin());
+select public.drop_policy_if_exists('cost_estimates', 'cost_estimates_admin_select');
+create policy cost_estimates_admin_select on public.cost_estimates for select to authenticated using (public.is_admin());
+select public.drop_policy_if_exists('cost_estimate_items', 'cost_estimate_items_admin_select');
+create policy cost_estimate_items_admin_select on public.cost_estimate_items for select to authenticated using (public.is_admin());
+select public.drop_policy_if_exists('escrow_accounts', 'escrow_accounts_admin_select');
+create policy escrow_accounts_admin_select on public.escrow_accounts for select to authenticated using (public.is_admin());
+select public.drop_policy_if_exists('escrow_milestones', 'escrow_milestones_admin_select');
+create policy escrow_milestones_admin_select on public.escrow_milestones for select to authenticated using (public.is_admin());
+select public.drop_policy_if_exists('escrow_releases', 'escrow_releases_admin_select');
+create policy escrow_releases_admin_select on public.escrow_releases for select to authenticated using (public.is_admin());
+select public.drop_policy_if_exists('conversations', 'conversations_admin_select');
+create policy conversations_admin_select on public.conversations for select to authenticated using (public.is_admin());
+select public.drop_policy_if_exists('conversation_members', 'conversation_members_admin_select');
+create policy conversation_members_admin_select on public.conversation_members for select to authenticated using (public.is_admin());
+select public.drop_policy_if_exists('messages', 'messages_admin_select');
+create policy messages_admin_select on public.messages for select to authenticated using (public.is_admin());
+select public.drop_policy_if_exists('insurance_policies', 'insurance_policies_admin_select');
+create policy insurance_policies_admin_select on public.insurance_policies for select to authenticated using (public.is_admin());
+select public.drop_policy_if_exists('sustainability_records', 'sustainability_records_admin_select');
+create policy sustainability_records_admin_select on public.sustainability_records for select to authenticated using (public.is_admin());
+select public.drop_policy_if_exists('apprenticeship_enrollments', 'apprenticeship_enrollments_admin_select');
+create policy apprenticeship_enrollments_admin_select on public.apprenticeship_enrollments for select to authenticated using (public.is_admin());
+-- Records admins can also change: disputes, claims, payouts, financing,
+-- credentials, organizations, payout accounts, maintenance and auctions.
+select public.drop_policy_if_exists('organizations', 'organizations_admin_update');
+create policy organizations_admin_update on public.organizations for update to authenticated
+using (public.is_admin()) with check (public.is_admin());
+select public.drop_policy_if_exists('disputes', 'disputes_admin_select');
+create policy disputes_admin_select on public.disputes for select to authenticated using (public.is_admin());
+select public.drop_policy_if_exists('disputes', 'disputes_admin_update');
+create policy disputes_admin_update on public.disputes for update to authenticated
+using (public.is_admin()) with check (public.is_admin());
+select public.drop_policy_if_exists('insurance_claims', 'insurance_claims_admin_select');
+create policy insurance_claims_admin_select on public.insurance_claims for select to authenticated using (public.is_admin());
+select public.drop_policy_if_exists('insurance_claims', 'insurance_claims_admin_update');
+create policy insurance_claims_admin_update on public.insurance_claims for update to authenticated
+using (public.is_admin()) with check (public.is_admin());
+select public.drop_policy_if_exists('payout_accounts', 'payout_accounts_admin_select');
+create policy payout_accounts_admin_select on public.payout_accounts for select to authenticated using (public.is_admin());
+select public.drop_policy_if_exists('payout_accounts', 'payout_accounts_admin_update');
+create policy payout_accounts_admin_update on public.payout_accounts for update to authenticated
+using (public.is_admin()) with check (public.is_admin());
+select public.drop_policy_if_exists('payouts', 'payouts_admin_select');
+create policy payouts_admin_select on public.payouts for select to authenticated using (public.is_admin());
+select public.drop_policy_if_exists('payouts', 'payouts_admin_update');
+create policy payouts_admin_update on public.payouts for update to authenticated
+using (public.is_admin()) with check (public.is_admin());
+select public.drop_policy_if_exists('financing_requests', 'financing_requests_admin_select');
+create policy financing_requests_admin_select on public.financing_requests for select to authenticated using (public.is_admin());
+select public.drop_policy_if_exists('financing_requests', 'financing_requests_admin_update');
+create policy financing_requests_admin_update on public.financing_requests for update to authenticated
+using (public.is_admin()) with check (public.is_admin());
+select public.drop_policy_if_exists('digital_certificates', 'digital_certificates_admin_select');
+create policy digital_certificates_admin_select on public.digital_certificates for select to authenticated using (public.is_admin());
+select public.drop_policy_if_exists('digital_certificates', 'digital_certificates_admin_update');
+create policy digital_certificates_admin_update on public.digital_certificates for update to authenticated
+using (public.is_admin()) with check (public.is_admin());
+select public.drop_policy_if_exists('skill_certifications', 'skill_certifications_admin_select');
+create policy skill_certifications_admin_select on public.skill_certifications for select to authenticated using (public.is_admin());
+select public.drop_policy_if_exists('skill_certifications', 'skill_certifications_admin_update');
+create policy skill_certifications_admin_update on public.skill_certifications for update to authenticated
+using (public.is_admin()) with check (public.is_admin());
+select public.drop_policy_if_exists('vehicle_maintenance_records', 'vehicle_maintenance_records_admin_update');
+create policy vehicle_maintenance_records_admin_update on public.vehicle_maintenance_records for update to authenticated
+using (public.is_admin()) with check (public.is_admin());
+select public.drop_policy_if_exists('auction_listings', 'auction_listings_admin_update');
+create policy auction_listings_admin_update on public.auction_listings for update to authenticated
+using (public.is_admin()) with check (public.is_admin());
+
 -- Basic reference data
+
 insert into public.vehicle_classes (code, name, rated_payload_kg, max_gvw_kg, axle_count) values
   ('PICKUP', 'Pickup', 1200, 3500, 2),
   ('FLATBED_3T', '3-ton flatbed', 3000, 7500, 2),
@@ -1057,3 +1245,716 @@ using (
   bucket_id = 'provider-verification'
   and (owner = auth.uid() or public.is_admin())
 );
+
+-- Job documents (transport permits, proof-of-work photos — SRS FR-13 / FR-22).
+insert into storage.buckets (id, name, public)
+values ('job-documents', 'job-documents', false)
+on conflict (id) do nothing;
+
+drop policy if exists job_documents_upload on storage.objects;
+drop policy if exists job_documents_select on storage.objects;
+
+create policy job_documents_upload on storage.objects
+for insert to authenticated
+with check (bucket_id = 'job-documents' and owner = auth.uid());
+
+create policy job_documents_select on storage.objects
+for select to authenticated
+using (
+  bucket_id = 'job-documents'
+  and (owner = auth.uid() or public.is_admin())
+);
+
+-- ---------------------------------------------------------------------
+-- Job lifecycle helpers
+-- ---------------------------------------------------------------------
+-- Providers claim an open job. security definer so a candidate provider
+-- (not yet a participant, so RLS would block the UPDATE) can be assigned,
+-- while still enforcing that the job is open and not their own request.
+create or replace function public.accept_job(target_job_id uuid)
+returns public.jobs
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  caller_role public.user_role;
+  previous_status public.job_status;
+  result public.jobs;
+begin
+  select role into caller_role from public.profiles where id = auth.uid();
+  if caller_role not in ('service_provider', 'heavy_operator') then
+    raise exception 'Only service providers can accept jobs';
+  end if;
+
+  select status into previous_status
+  from public.jobs where id = target_job_id for update;
+
+  if previous_status is null then
+    raise exception 'Job not found';
+  end if;
+
+  update public.jobs
+     set provider_id = auth.uid(),
+         status = 'confirmed',
+        availability_status = 'unavailable'
+   where id = target_job_id
+     and provider_id is null
+     and status in ('posted', 'matching')
+     and client_id <> auth.uid()
+      and availability_status = 'available'
+  returning * into result;
+
+  if result.id is null then
+    raise exception 'This job is no longer available';
+  end if;
+
+  insert into public.job_status_history (job_id, from_status, to_status, changed_by, reason)
+  values (result.id, previous_status, 'confirmed', auth.uid(), 'Provider accepted the job');
+
+  insert into public.notifications (user_id, title, body, notification_type, data)
+  values (
+    result.client_id,
+    'Job accepted',
+    'A provider accepted your job: ' || result.title,
+    'in_app',
+    jsonb_build_object('job_id', result.id, 'status', 'confirmed')
+  );
+
+  return result;
+end;
+$$;
+
+grant execute on function public.accept_job(uuid) to authenticated;
+
+-- SRS FR-22: a haulage job cannot go en route without an approved,
+-- unexpired transport permit on file for the job.
+create or replace function public.enforce_haulage_permit()
+returns trigger language plpgsql security definer set search_path = public
+as $$
+begin
+  if new.job_type = 'haulage' and new.status = 'en_route' and old.status is distinct from 'en_route' then
+    if not exists (
+      select 1 from public.regulatory_permits p
+      where p.job_id = new.id
+        and p.status = 'approved'
+        and (p.valid_until is null or p.valid_until >= now())
+    ) then
+      raise exception 'A haulage job cannot go en route until an approved transport permit is on file.';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists jobs_haulage_permit_gate on public.jobs;
+create trigger jobs_haulage_permit_gate
+before update of status on public.jobs
+for each row execute function public.enforce_haulage_permit();
+
+-- ---------------------------------------------------------------------
+-- Escrow, disputes and job chat (SRS FR-06 / FR-10)
+-- ---------------------------------------------------------------------
+-- Mobile-money partner APIs (Telebirr/M-Pesa) are not yet available, so
+-- funding is recorded through a demo wallet provider. Swap the provider
+-- name and insert path for the real webhook-driven flow later.
+create or replace function public.fund_job_escrow(target_job_id uuid, amount numeric)
+returns public.escrow_accounts
+language plpgsql security definer set search_path = public
+as $$
+declare
+  job_row public.jobs;
+  result public.escrow_accounts;
+begin
+  if amount is null or amount <= 0 then
+    raise exception 'Enter a funding amount greater than zero';
+  end if;
+
+  select * into job_row from public.jobs where id = target_job_id for update;
+  if job_row.id is null then raise exception 'Job not found'; end if;
+  if job_row.client_id <> auth.uid() then raise exception 'Only the client can fund this job'; end if;
+  if job_row.provider_id is null then
+    raise exception 'Wait until a provider accepts the job before funding escrow';
+  end if;
+  if job_row.status not in ('confirmed', 'en_route', 'in_progress') then
+    raise exception 'Escrow can only be funded while work is active';
+  end if;
+  if exists (select 1 from public.escrow_accounts e where e.job_id = target_job_id and e.status <> 'pending') then
+    raise exception 'Escrow for this job is already funded';
+  end if;
+
+  insert into public.payments (job_id, payer_id, payee_id, amount, status, provider, provider_reference, idempotency_key)
+  values (target_job_id, job_row.client_id, job_row.provider_id, amount, 'succeeded', 'demo_wallet',
+          gen_random_uuid()::text, gen_random_uuid()::text);
+
+  insert into public.escrow_accounts (job_id, payer_id, payee_id, funded_amount, status)
+  values (target_job_id, job_row.client_id, job_row.provider_id, amount, 'funded')
+  on conflict (job_id) do update
+    set payee_id = excluded.payee_id,
+        funded_amount = excluded.funded_amount,
+        status = 'funded'
+  returning * into result;
+
+  insert into public.notifications (user_id, title, body, data)
+  values (job_row.provider_id, 'Escrow funded',
+          'The client funded escrow for job #' || job_row.job_number,
+          jsonb_build_object('job_id', target_job_id));
+  return result;
+end;
+$$;
+
+grant execute on function public.fund_job_escrow(uuid, numeric) to authenticated;
+
+create or replace function public.release_job_escrow(target_job_id uuid)
+returns public.escrow_accounts
+language plpgsql security definer set search_path = public
+as $$
+declare
+  job_row public.jobs;
+  result public.escrow_accounts;
+begin
+  select * into job_row from public.jobs where id = target_job_id for update;
+  if job_row.id is null then raise exception 'Job not found'; end if;
+  if job_row.client_id <> auth.uid() then raise exception 'Only the client can release payment'; end if;
+  if job_row.status <> 'completed' then raise exception 'Payment can only be released after the job is completed'; end if;
+
+  update public.escrow_accounts
+     set released_amount = funded_amount,
+         status = 'released'
+   where job_id = target_job_id
+     and status in ('funded', 'partially_released')
+     and funded_amount > 0
+  returning * into result;
+
+  if result.id is null then raise exception 'No funded escrow found for this job'; end if;
+
+  insert into public.notifications (user_id, title, body, data)
+  values (job_row.provider_id, 'Payment released',
+          'Escrow payment released for job #' || job_row.job_number,
+          jsonb_build_object('job_id', target_job_id));
+  return result;
+end;
+$$;
+
+grant execute on function public.release_job_escrow(uuid) to authenticated;
+
+-- Disputes freeze the job and any unfunded/released-pending escrow (FR-10).
+create or replace function public.open_job_dispute(target_job_id uuid, dispute_reason text)
+returns public.disputes
+language plpgsql security definer set search_path = public
+as $$
+declare
+  job_row public.jobs;
+  other_user uuid;
+  result public.disputes;
+begin
+  if dispute_reason is null or length(trim(dispute_reason)) < 5 then
+    raise exception 'Describe the issue in at least a few words';
+  end if;
+
+  select * into job_row from public.jobs where id = target_job_id for update;
+  if job_row.id is null then raise exception 'Job not found'; end if;
+  if auth.uid() is distinct from job_row.client_id
+     and auth.uid() is distinct from job_row.provider_id
+     and auth.uid() is distinct from job_row.operator_id then
+    raise exception 'Only job participants can open a dispute';
+  end if;
+  if job_row.status in ('cancelled', 'disputed') then
+    raise exception 'This job cannot be disputed';
+  end if;
+
+  insert into public.disputes (job_id, opened_by, reason)
+  values (target_job_id, auth.uid(), trim(dispute_reason))
+  returning * into result;
+
+  update public.jobs set status = 'disputed' where id = target_job_id;
+  update public.escrow_accounts
+     set status = 'disputed'
+   where job_id = target_job_id
+     and status in ('pending', 'funded', 'partially_released');
+
+  other_user := case when job_row.client_id = auth.uid() then job_row.provider_id else job_row.client_id end;
+  if other_user is not null then
+    insert into public.notifications (user_id, title, body, data)
+    values (other_user, 'Dispute opened',
+            'A dispute was opened on job #' || job_row.job_number,
+            jsonb_build_object('job_id', target_job_id));
+  end if;
+
+  return result;
+end;
+$$;
+
+grant execute on function public.open_job_dispute(uuid, text) to authenticated;
+
+-- One chat room per job for its participants (FR-10). Creates the
+-- conversation and membership rows idempotently and returns the id.
+create or replace function public.ensure_job_conversation(target_job_id uuid)
+returns uuid
+language plpgsql security definer set search_path = public
+as $$
+declare
+  job_row public.jobs;
+  convo_id uuid;
+begin
+  select * into job_row from public.jobs where id = target_job_id;
+  if job_row.id is null then raise exception 'Job not found'; end if;
+  if auth.uid() is distinct from job_row.client_id
+     and auth.uid() is distinct from job_row.provider_id
+     and auth.uid() is distinct from job_row.operator_id then
+    raise exception 'Only job participants can use the job chat';
+  end if;
+
+  select id into convo_id from public.conversations where job_id = target_job_id;
+  if convo_id is null then
+    insert into public.conversations (job_id, created_by)
+    values (target_job_id, coalesce(job_row.client_id, auth.uid()))
+    returning id into convo_id;
+  end if;
+
+  insert into public.conversation_members (conversation_id, user_id)
+  values (convo_id, job_row.client_id) on conflict do nothing;
+  if job_row.provider_id is not null then
+    insert into public.conversation_members (conversation_id, user_id)
+    values (convo_id, job_row.provider_id) on conflict do nothing;
+  end if;
+  if job_row.operator_id is not null then
+    insert into public.conversation_members (conversation_id, user_id)
+    values (convo_id, job_row.operator_id) on conflict do nothing;
+  end if;
+
+  return convo_id;
+end;
+$$;
+
+grant execute on function public.ensure_job_conversation(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------
+-- SRS FR-13: Milestone escrow for custom builds.
+-- Multi-stage payment tranche release with proof-of-work capture.
+-- ---------------------------------------------------------------------
+create or replace function public.create_escrow_milestone(
+  target_escrow_id uuid,
+  milestone_title text,
+  milestone_amount numeric(14,2),
+  milestone_sequence integer,
+  milestone_description text default null,
+  milestone_due_at timestamptz default null
+)
+returns public.escrow_milestones
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  escrow_row public.escrow_accounts;
+  result public.escrow_milestones;
+begin
+  select * into escrow_row from public.escrow_accounts where id = target_escrow_id for update;
+  if escrow_row.id is null then raise exception 'Escrow account not found'; end if;
+  if auth.uid() is distinct from escrow_row.payer_id then
+    raise exception 'Only the client who funded escrow can create milestones';
+  end if;
+  if escrow_row.status <> 'funded' then
+    raise exception 'Escrow must be funded before creating milestones';
+  end if;
+
+  insert into public.escrow_milestones (escrow_id, title, description, amount, sequence_number, due_at, status)
+  values (target_escrow_id, milestone_title, milestone_description, milestone_amount, milestone_sequence, milestone_due_at, 'pending')
+  returning * into result;
+
+  return result;
+end;
+$$;
+
+grant execute on function public.create_escrow_milestone(uuid, text, numeric, integer, text, timestamptz) to authenticated;
+
+create or replace function public.submit_milestone_proof(
+  target_milestone_id uuid,
+  proof_document_url text,
+  proof_description text default null
+)
+returns public.escrow_milestones
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  milestone_row public.escrow_milestones;
+  escrow_row public.escrow_accounts;
+  result public.escrow_milestones;
+begin
+  select * into milestone_row from public.escrow_milestones where id = target_milestone_id for update;
+  if milestone_row.id is null then raise exception 'Milestone not found'; end if;
+
+  select * into escrow_row from public.escrow_accounts where id = milestone_row.escrow_id;
+  if auth.uid() is distinct from escrow_row.payee_id then
+    raise exception 'Only the assigned provider can submit proof of work';
+  end if;
+  if milestone_row.status <> 'pending' then
+    raise exception 'Milestone is not in pending status';
+  end if;
+
+  update public.escrow_milestones
+     set status = 'submitted',
+         completed_at = now()
+   where id = target_milestone_id
+  returning * into result;
+
+  return result;
+end;
+$$;
+
+grant execute on function public.submit_milestone_proof(uuid, text, text) to authenticated;
+
+create or replace function public.approve_milestone(
+  target_milestone_id uuid
+)
+returns public.escrow_milestones
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  milestone_row public.escrow_milestones;
+  escrow_row public.escrow_accounts;
+  result public.escrow_milestones;
+begin
+  select * into milestone_row from public.escrow_milestones where id = target_milestone_id for update;
+  if milestone_row.id is null then raise exception 'Milestone not found'; end if;
+
+  select * into escrow_row from public.escrow_accounts where id = milestone_row.escrow_id;
+  if auth.uid() is distinct from escrow_row.payer_id then
+    raise exception 'Only the client can approve milestones';
+  end if;
+  if milestone_row.status <> 'submitted' then
+    raise exception 'Milestone has not been submitted for review';
+  end if;
+
+  update public.escrow_milestones
+     set status = 'approved'
+   where id = target_milestone_id
+  returning * into result;
+
+  return result;
+end;
+$$;
+
+grant execute on function public.approve_milestone(uuid) to authenticated;
+
+create or replace function public.release_milestone_payment(
+  target_milestone_id uuid
+)
+returns public.escrow_releases
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  milestone_row public.escrow_milestones;
+  escrow_row public.escrow_accounts;
+  release_result public.escrow_releases;
+begin
+  select * into milestone_row from public.escrow_milestones where id = target_milestone_id for update;
+  if milestone_row.id is null then raise exception 'Milestone not found'; end if;
+
+  select * into escrow_row from public.escrow_accounts where id = milestone_row.escrow_id;
+  if auth.uid() is distinct from escrow_row.payer_id then
+    raise exception 'Only the client can release milestone payments';
+  end if;
+  if milestone_row.status <> 'approved' then
+    raise exception 'Milestone must be approved before payment release';
+  end if;
+  if escrow_row.funded_amount - escrow_row.released_amount < milestone_row.amount then
+    raise exception 'Insufficient escrow funds for this milestone';
+  end if;
+
+  insert into public.escrow_releases (milestone_id, amount, released_by)
+  values (target_milestone_id, milestone_row.amount, auth.uid())
+  returning * into release_result;
+
+  update public.escrow_milestones
+     set status = 'released'
+   where id = target_milestone_id;
+
+  update public.escrow_accounts
+     set released_amount = released_amount + milestone_row.amount,
+         status = case
+           when released_amount + milestone_row.amount >= funded_amount then 'released'
+           else 'partially_released'
+         end
+   where id = milestone_row.escrow_id;
+
+  return release_result;
+end;
+$$;
+
+grant execute on function public.release_milestone_payment(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------
+-- SRS FR-05: Auction engine with anti-sniping (FR-14).
+-- ---------------------------------------------------------------------
+create or replace function public.place_auction_bid(
+  target_auction_id uuid,
+  bid_amount numeric,
+  bidder_full_name text default null
+) returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  new_bid_id uuid;
+  current_max numeric;
+  auction_row record;
+  extension_seconds integer;
+  now_ts timestamptz;
+  fraud numeric;
+begin
+  now_ts := now();
+
+  select * into auction_row
+  from public.auction_listings
+  where id = target_auction_id;
+
+  if not found then
+    raise exception 'Auction not found.';
+  end if;
+
+  if auction_row.status <> 'open' then
+    raise exception 'Auction is not currently open.';
+  end if;
+
+  if now_ts < auction_row.starts_at then
+    raise exception 'Auction has not started yet.';
+  end if;
+
+  if now_ts > auction_row.ends_at then
+    update public.auction_listings
+    set status = 'closed'
+    where id = target_auction_id;
+    raise exception 'Auction has already closed.';
+  end if;
+
+  select coalesce(max(amount), auction_row.starting_price) into current_max
+  from public.auction_bids
+  where auction_id = target_auction_id and status in ('active','winning');
+
+  if bid_amount <= current_max then
+    raise exception 'Bid must be higher than current price of %.', current_max;
+  end if;
+
+  -- Fraud heuristic: unusually high first bid relative to starting price
+  fraud := least(1.0, greatest(0.0, (bid_amount - current_max) / nullif(current_max, 0)));
+
+  insert into public.auction_bids (auction_id, bidder_id, amount, fraud_score, status)
+  values (target_auction_id, auth.uid(), bid_amount, fraud, 'active')
+  returning id into new_bid_id;
+
+  -- Mark all previous active bids as outbid except the new one
+  update public.auction_bids
+  set status = 'outbid'
+  where auction_id = target_auction_id
+    and id <> new_bid_id
+    and status in ('active','winning');
+
+  -- Mark the new bid as winning
+  update public.auction_bids
+  set status = 'winning'
+  where id = new_bid_id;
+
+  -- Anti-sniping: if bid placed in the final N seconds, extend by N seconds
+  extension_seconds := auction_row.anti_sniping_seconds;
+  if extension_seconds > 0 then
+    if now_ts > auction_row.ends_at - (extension_seconds || ' seconds')::interval then
+      update public.auction_listings
+      set ends_at = auction_row.ends_at + (extension_seconds || ' seconds')::interval
+      where id = target_auction_id;
+    end if;
+  end if;
+
+  -- Notify seller and previous winning bidder via notifications table
+  insert into public.notifications (user_id, title, body, notification_type, data)
+  values (
+    auction_row.seller_id,
+    'New bid on your auction',
+    format('A new bid of %s was placed on %s.', bid_amount, auction_row.title),
+    'in_app',
+    jsonb_build_object('related_id', target_auction_id, 'type', 'auction_bid')
+  );
+
+  return new_bid_id;
+end;
+$$;
+
+grant execute on function public.place_auction_bid(uuid, numeric, text) to authenticated;
+
+create or replace function public.close_auction(target_auction_id uuid) returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  auction_row record;
+  winning_bid record;
+begin
+  select * into auction_row
+  from public.auction_listings
+  where id = target_auction_id;
+
+  if not found then
+    raise exception 'Auction not found.';
+  end if;
+
+  if not public.is_admin() then
+    raise exception 'Only administrators can close auctions.';
+  end if;
+
+  update public.auction_listings
+  set status = 'closed'
+  where id = target_auction_id;
+
+  select * into winning_bid
+  from public.auction_bids
+  where auction_id = target_auction_id and status = 'winning'
+  order by amount desc, created_at desc
+  limit 1;
+
+  if found then
+    insert into public.notifications (user_id, title, body, notification_type, data)
+    values (
+      winning_bid.bidder_id,
+      'You won the auction!',
+      format('Your bid of %s on %s was the winning bid.', winning_bid.amount, auction_row.title),
+      'in_app',
+      jsonb_build_object('related_id', target_auction_id, 'type', 'auction_won')
+    );
+  end if;
+end;
+$$;
+
+grant execute on function public.close_auction(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------
+-- SRS FR-01: Admin user management.
+-- ---------------------------------------------------------------------
+create or replace function public.ban_user(target_user_id uuid) returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  caller_role public.user_role;
+begin
+  select role into caller_role from public.profiles where id = auth.uid();
+  if caller_role <> 'admin' then
+    raise exception 'Only administrators can ban users.';
+  end if;
+
+  update public.profiles
+  set status = 'suspended', updated_at = now()
+  where id = target_user_id;
+end;
+$$;
+grant execute on function public.ban_user(uuid) to authenticated;
+
+create or replace function public.unban_user(target_user_id uuid) returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  caller_role public.user_role;
+begin
+  select role into caller_role from public.profiles where id = auth.uid();
+  if caller_role <> 'admin' then
+    raise exception 'Only administrators can unban users.';
+  end if;
+
+  update public.profiles
+  set status = 'active', updated_at = now()
+  where id = target_user_id;
+end;
+$$;
+grant execute on function public.unban_user(uuid) to authenticated;
+
+create or replace function public.update_user_role(target_user_id uuid, new_role public.user_role) returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  caller_role public.user_role;
+begin
+  select role into caller_role from public.profiles where id = auth.uid();
+  if caller_role <> 'admin' then
+    raise exception 'Only administrators can change user roles.';
+  end if;
+
+  update public.profiles
+  set role = new_role, updated_at = now()
+  where id = target_user_id;
+end;
+$$;
+grant execute on function public.update_user_role(uuid, public.user_role) to authenticated;
+
+create or replace function public.delete_user(target_user_id uuid) returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  caller_role public.user_role;
+begin
+  select role into caller_role from public.profiles where id = auth.uid();
+  if caller_role <> 'admin' then
+    raise exception 'Only administrators can delete users.';
+  end if;
+
+  -- Prevent admins from deleting themselves
+  if target_user_id = auth.uid() then
+    raise exception 'You cannot delete your own account.';
+  end if;
+
+  -- Delete from profiles (auth.users cascade deletes profile, but we delete profile first
+  -- to remove the link; auth user remains until explicitly removed via service role)
+  delete from public.profiles where id = target_user_id;
+end;
+$$;
+grant execute on function public.delete_user(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------
+-- SRS FR-11: AI Job Cost Estimator.
+-- ---------------------------------------------------------------------
+create or replace function public.create_cost_estimate(
+  target_job_id uuid,
+  labor_cost_amount numeric default 0,
+  materials_cost_amount numeric default 0,
+  transport_cost_amount numeric default 0,
+  estimate_inputs jsonb default '{}'::jsonb
+)
+returns public.cost_estimates
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  job_row public.jobs;
+  result public.cost_estimates;
+begin
+  select * into job_row from public.jobs where id = target_job_id;
+  if job_row.id is null then raise exception 'Job not found'; end if;
+  if auth.uid() is distinct from job_row.client_id then
+    raise exception 'Only the client can request a cost estimate';
+  end if;
+
+  insert into public.cost_estimates (job_id, requested_by, labor_cost, materials_cost, transport_cost, inputs)
+  values (target_job_id, auth.uid(), labor_cost_amount, materials_cost_amount, transport_cost_amount, estimate_inputs)
+  returning * into result;
+
+  return result;
+end;
+$$;
+
+grant execute on function public.create_cost_estimate(uuid, numeric, numeric, numeric, jsonb) to authenticated;
+

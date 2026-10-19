@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Check, ExternalLink, LoaderCircle, ShieldCheck, X } from 'lucide-react';
-import { Button } from '../components/Button';
+import { AdminButton as Button } from '../admin/sections/adminUi';
 import { supabase } from '../lib/supabase';
 
 const getVerificationDocuments = (documentUrl, verificationType) => {
@@ -24,22 +24,26 @@ const VerificationQueue = () => {
   const [role, setRole] = useState('');
   const [records, setRecords] = useState([]);
   const [permits, setPermits] = useState([]);
+  const [incidents, setIncidents] = useState([]);
   const [notes, setNotes] = useState({});
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(null);
   const [error, setError] = useState('');
 
   const loadRecords = async () => {
-    const [{ data, error: queryError }, { data: permitData, error: permitError }] = await Promise.all([
+    const [{ data, error: queryError }, { data: permitData, error: permitError }, { data: incidentData, error: incidentError }] = await Promise.all([
       supabase.from('provider_verifications').select('id, provider_id, verification_type, status, document_url, created_at')
         .eq('status', 'pending').order('created_at', { ascending: true }),
       supabase.from('regulatory_permits').select('id, job_id, permit_type, permit_number, issuing_authority, valid_until, created_at')
         .eq('status', 'pending').order('created_at', { ascending: true }),
+      supabase.from('safety_incidents').select('id, job_id, incident_type, severity, description, status, emergency_sos, latitude, longitude, created_at')
+        .eq('status', 'open').order('created_at', { ascending: true }),
     ]);
-    if (queryError || permitError) setError(queryError?.message || permitError?.message);
+    if (queryError || permitError || incidentError) setError(queryError?.message || permitError?.message || incidentError?.message);
     else {
       setRecords(data || []);
       setPermits(permitData || []);
+      setIncidents(incidentData || []);
     }
   };
 
@@ -88,6 +92,16 @@ const VerificationQueue = () => {
     setWorking(null);
   };
 
+  const resolveIncident = async (incident) => {
+    setWorking(incident.id);
+    setError('');
+    const { error: resolveError } = await supabase.from('safety_incidents')
+      .update({ status: 'resolved', resolved_at: new Date().toISOString() }).eq('id', incident.id);
+    if (resolveError) setError(resolveError.message);
+    else await loadRecords();
+    setWorking(null);
+  };
+
   if (loading) return <div className="py-16 text-sm text-slate-500">Loading verification queue...</div>;
   if (role !== 'admin') return <p className="border-l-4 border-amber-500 bg-amber-50 px-4 py-3 text-sm text-amber-900">Administrator access is required to review provider documents.</p>;
 
@@ -130,6 +144,34 @@ const VerificationQueue = () => {
       <section>
         <div className="border-b border-slate-200 pb-3"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">COMPLIANCE</p><h2 className="mt-1 text-xl font-bold text-brand-navy">Transport permits</h2></div>
         {permits.length ? <div className="divide-y divide-slate-200 border-b border-slate-200">{permits.map((permit) => <article key={permit.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-semibold text-brand-navy">{permit.permit_type}{permit.permit_number ? ` · ${permit.permit_number}` : ''}</p><p className="mt-1 text-sm text-slate-600">Job {permit.job_id.slice(0, 8)} · {permit.issuing_authority || 'Issuing authority not provided'} · submitted {new Date(permit.created_at).toLocaleDateString()}</p>{permit.valid_until && <p className="mt-1 text-xs text-slate-500">Expiry: {new Date(permit.valid_until).toLocaleDateString()}</p>}</div><div className="flex gap-2"><Button onClick={() => reviewPermit(permit, 'approved')} disabled={working === permit.id} className="h-9 gap-2 px-3 text-sm"><Check size={15} />Approve</Button><Button variant="outline" onClick={() => reviewPermit(permit, 'rejected')} disabled={working === permit.id} className="h-9 gap-2 border-red-300 px-3 text-sm text-red-700 hover:bg-red-50"><X size={15} />Reject</Button></div></article>)}</div> : <p className="border-b border-slate-200 py-8 text-center text-sm text-slate-500">No transport permits are waiting for review.</p>}
+      </section>
+      <section>
+        <div className="border-b border-slate-200 pb-3"><p className="text-xs font-bold uppercase tracking-wide text-red-500">SAFETY</p><h2 className="mt-1 text-xl font-bold text-brand-navy">Incident reports &amp; emergency SOS</h2></div>
+        {incidents.length ? (
+          <div className="divide-y divide-slate-200 border-b border-slate-200">
+            {incidents.map((incident) => (
+              <article key={incident.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="flex flex-wrap items-center gap-2">
+                    <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide ${incident.severity === 'critical' ? 'border-red-300 bg-red-50 text-red-700' : incident.severity === 'high' ? 'border-amber-300 bg-amber-50 text-amber-700' : 'border-slate-200 bg-slate-50 text-slate-600'}`}>{incident.severity}</span>
+                    {incident.emergency_sos && <span className="inline-flex items-center gap-1 rounded-full bg-red-600 px-2.5 py-0.5 text-xs font-bold uppercase text-white">SOS</span>}
+                    <span className="text-xs font-bold uppercase tracking-wide text-slate-500">{incident.incident_type.replace('_', ' ')}</span>
+                  </p>
+                  <p className="mt-2 text-sm text-slate-700">{incident.description}</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {incident.job_id ? `Job ${incident.job_id.slice(0, 8)} · ` : ''}Reported {new Date(incident.created_at).toLocaleString()}
+                    {incident.latitude != null && incident.longitude != null ? ` · Location ${Number(incident.latitude).toFixed(4)}, ${Number(incident.longitude).toFixed(4)}` : ' · No location captured'}
+                  </p>
+                </div>
+                <Button onClick={() => resolveIncident(incident)} disabled={working === incident.id} variant="outline" className="h-9 shrink-0 gap-2 px-3 text-sm">
+                  <Check size={15} /> Mark resolved
+                </Button>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="border-b border-slate-200 py-8 text-center text-sm text-slate-500">No open safety incidents.</p>
+        )}
       </section>
     </div>
   );
