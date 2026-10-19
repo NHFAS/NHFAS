@@ -1,6 +1,7 @@
 import React from 'react';
 import { Search, ClipboardList, Shield, MapPin, CheckCircle } from 'lucide-react';
-import heroImage from '../assets/hero-image.jpg';
+
+const heroImage = '/illustrations/workflow.svg';
 
 const HowItWorks = () => {
   const steps = [
@@ -13,22 +14,22 @@ const HowItWorks = () => {
     },
     {
       icon: <ClipboardList className="w-6 h-6" />,
-      title: '2. Book & Confirm',
-      desc: 'Get quotes and confirm your booking.',
+      title: '2. Post & Confirm',
+      desc: 'Share the job details and confirm the agreed scope.',
       color: 'text-blue-500',
       bg: 'bg-blue-100'
     },
     {
       icon: <Shield className="w-6 h-6" />,
-      title: '3. Pay Securely',
-      desc: 'Use escrow and trusted payment methods.',
+      title: '3. Track Escrow',
+      desc: 'Review the escrow status linked to your job.',
       color: 'text-amber-500',
       bg: 'bg-amber-100'
     },
     {
       icon: <MapPin className="w-6 h-6" />,
       title: '4. Track Progress',
-      desc: 'Follow in real-time via GPS and updates.',
+      desc: 'See job status updates and location when it is shared.',
       color: 'text-brand-purple',
       bg: 'bg-purple-100'
     },
@@ -43,7 +44,7 @@ const HowItWorks = () => {
   ];
 
   return (
-    <section id="how-it-works" className="py-20 bg-white relative overflow-hidden">
+    <section id="how-it-works" className="scroll-mt-24 py-20 bg-white relative overflow-hidden">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         <div className="flex flex-col lg:flex-row items-center gap-16">
@@ -57,7 +58,7 @@ const HowItWorks = () => {
               Get Your Job Done<br />in 5 Simple Steps
             </h2>
             <p className="text-slate-500 text-lg mb-12">
-              Fast, easy, and secure — from booking to completion.
+              From service discovery through completion, keep job details and updates together.
             </p>
 
             <div className="relative">

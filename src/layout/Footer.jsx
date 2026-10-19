@@ -1,5 +1,4 @@
 import React from 'react';
-import { Truck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 const Footer = () => {
@@ -10,7 +9,7 @@ const Footer = () => {
           {/* Brand */}
           <div className="space-y-4">
             <div className="flex items-center gap-2">
-              <Truck className="w-8 h-8 text-white" />
+              <img src="/brand/logo.svg" alt="NHFAS Logo" className="h-10 w-auto" />
               <span className="font-extrabold text-2xl tracking-tight text-white">NHFAS</span>
             </div>
             <p className="text-slate-400 text-sm max-w-xs">

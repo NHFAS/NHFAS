@@ -1,0 +1,18 @@
+{
+  "name": "NHFAS — National Heavy Freight & Artisan System",
+  "short_name": "NHFAS",
+  "description": "Dual-service marketplace and logistics coordination platform for Ethiopia: vetted artisans, handyman services, and heavy haulage.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0B2545",
+  "theme_color": "#0B2545",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

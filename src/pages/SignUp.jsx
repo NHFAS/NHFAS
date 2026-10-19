@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, User, ArrowRight, Home, Briefcase, Truck } from 'lucide-react';
-import logo from '../assets/logo.png';
 import { Button } from '../components/Button';
 import { cn } from '../lib/utils';
 import { supabase } from '../lib/supabase';
@@ -76,7 +75,7 @@ const SignUp = () => {
         <div className="max-w-md w-full mx-auto space-y-8 mt-12 lg:mt-0">
           <div className="text-center lg:text-left">
             <div className="flex items-center justify-center lg:justify-start gap-2 mb-6">
-              <img src={logo} alt="NHFAS Logo" className="h-14 w-auto object-contain" />
+              <img src="/brand/logo.svg" alt="NHFAS Logo" className="h-10 w-auto object-contain" />
               <span className="font-extrabold text-2xl text-brand-navy tracking-tight">NHFAS</span>
             </div>
             <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Create an account</h1>

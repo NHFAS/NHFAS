@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Menu, X, Truck, ArrowRight } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Search, Menu, X, ArrowRight } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '../components/Button';
 import { cn } from '../lib/utils';
-import logo from '../assets/logo.png';
 
 const Navbar = () => {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -12,6 +11,7 @@ const Navbar = () => {
   const [activeLink, setActiveLink] = useState('Home');
   const [searchQuery, setSearchQuery] = useState('');
   const navigate = useNavigate();
+  const location = useLocation();
 
   const handleSearch = (event) => {
     event.preventDefault();
@@ -30,12 +30,25 @@ const Navbar = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  useEffect(() => {
+    if (location.pathname !== '/') return;
+
+    if (location.hash) {
+      const targetId = location.hash.slice(1);
+      requestAnimationFrame(() => {
+        document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [location.pathname, location.hash]);
+
   const navLinks = [
     { name: 'Home', href: '/' },
     { name: 'Services', href: '/#services' },
     { name: 'How It Works', href: '/#how-it-works' },
+    { name: 'Marketplace', href: '/search' },
     { name: 'About Us', href: '/about' },
-    { name: 'Contact', href: '/contact' },
   ];
 
   return (
@@ -50,7 +63,7 @@ const Navbar = () => {
           
           {/* Logo */}
           <Link to="/" className="flex items-center flex-shrink-0 cursor-pointer gap-2" onClick={() => setActiveLink('Home')}>
-            <img src={logo} alt="NHFAS Logo" className="h-14 w-auto object-contain" />
+            <img src="/brand/logo.svg" alt="NHFAS Logo" className="h-10 w-auto object-contain" />
             <span className="font-extrabold text-2xl text-brand-navy tracking-tight">NHFAS</span>
           </Link>
 
@@ -63,7 +76,10 @@ const Navbar = () => {
               <Link
                 key={link.name}
                 to={link.href}
-                onClick={() => setActiveLink(link.name)}
+                onClick={() => {
+                  setActiveLink(link.name);
+                  setIsSearchOpen(false);
+                }}
                 className={cn(
                   "text-sm font-semibold transition-colors hover:text-brand-green whitespace-nowrap",
                   activeLink === link.name ? "text-brand-navy border-b-2 border-brand-green pb-1" : "text-slate-500"
@@ -118,8 +134,12 @@ const Navbar = () => {
 
           {/* Mobile Menu Button */}
           <div className="md:hidden flex items-center">
-            <button 
+            <button
+              type="button"
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              aria-label={isMobileMenuOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={isMobileMenuOpen}
+              aria-controls="mobile-navigation"
               className="text-slate-600 hover:text-brand-navy p-2"
             >
               {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
@@ -130,7 +150,7 @@ const Navbar = () => {
 
       {/* Mobile Menu */}
       {isMobileMenuOpen && (
-        <div className="md:hidden absolute top-full left-0 w-full bg-white shadow-lg border-t border-slate-100">
+        <div id="mobile-navigation" className="md:hidden absolute top-full left-0 w-full bg-white shadow-lg border-t border-slate-100">
           <div className="px-4 pt-2 pb-6 space-y-1">
             <form onSubmit={handleSearch} role="search" className="relative px-3 pb-2">
               <Search aria-hidden="true" className="absolute left-6 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />

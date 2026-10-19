@@ -1,9 +1,111 @@
-import React, { useState } from 'react';
-import { MapPin } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { AlertCircle, MapPin } from 'lucide-react';
+import { useOutletContext } from 'react-router-dom';
 import ProviderMap from '../components/ProviderMap';
+import { supabase } from '../lib/supabase';
+
+const LOCATION_PERSIST_INTERVAL_MS = 10000;
 
 const FindMe = () => {
+  const { user } = useOutletContext();
   const [isFindMeActive, setIsFindMeActive] = useState(false);
+  const [locationError, setLocationError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const watchIdRef = useRef(null);
+  const lastPersistRef = useRef(0);
+
+  // Load the stored visibility + last location so the toggle survives reloads.
+  useEffect(() => {
+    if (!user) return undefined;
+    let isCurrent = true;
+    (async () => {
+      const { data } = await supabase
+        .from('provider_profiles')
+        .select('is_searchable, last_latitude, last_longitude')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (!isCurrent || !data) return;
+      setIsFindMeActive(Boolean(data.is_searchable));
+    })();
+    return () => {
+      isCurrent = false;
+    };
+  }, [user]);
+
+  const stopWatching = () => {
+    if (watchIdRef.current != null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+  };
+
+  // Clean up the browser location watcher when leaving the page.
+  useEffect(() => stopWatching, []);
+
+  const persist = async (visible, position, { silent = false } = {}) => {
+    if (!user) return false;
+    if (!silent) setIsSaving(true);
+    const updates = { is_searchable: visible };
+    if (position) {
+      updates.last_latitude = position[0];
+      updates.last_longitude = position[1];
+      updates.last_location_at = new Date().toISOString();
+    }
+    const { error } = await supabase
+      .from('provider_profiles')
+      .upsert({ user_id: user.id, ...updates }, { onConflict: 'user_id' });
+    if (!silent) setIsSaving(false);
+    if (error) {
+      if (!silent) {
+        setLocationError('Your visibility setting could not be saved. Check your connection and try again.');
+      }
+      return false;
+    }
+    lastPersistRef.current = Date.now();
+    return true;
+  };
+
+  const handleToggle = async () => {
+    setLocationError('');
+    const nextActive = !isFindMeActive;
+
+    if (!nextActive) {
+      setIsFindMeActive(false);
+      stopWatching();
+      await persist(false, null);
+      return;
+    }
+
+    if (!('geolocation' in navigator)) {
+      setLocationError('Location is not available in this browser, so Find Me cannot be switched on.');
+      return;
+    }
+
+    const saved = await persist(true, null);
+    if (!saved) return;
+    setIsFindMeActive(true);
+
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (position) => {
+        const next = [position.coords.latitude, position.coords.longitude];
+        // Throttle writes: at most one location update every 10 seconds.
+        if (Date.now() - lastPersistRef.current >= LOCATION_PERSIST_INTERVAL_MS) {
+          persist(true, next, { silent: true });
+        }
+      },
+      (error) => {
+        if (error.code === error.PERMISSION_DENIED) {
+          setLocationError('Location permission was denied. Allow location access to appear on the client map.');
+          stopWatching();
+          setIsFindMeActive(false);
+          persist(false, null, { silent: true });
+        } else {
+          setLocationError('Your location could not be updated. It will keep retrying while Find Me is active.');
+        }
+      },
+      { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 },
+    );
+  };
 
   return (
     <div className="space-y-8">
@@ -15,15 +117,16 @@ const FindMe = () => {
         </div>
         <div className="flex items-center gap-4">
           <button
-            onClick={() => setIsFindMeActive(!isFindMeActive)}
-            className={`inline-flex items-center gap-2 px-6 py-3 rounded-full font-bold transition-all shadow-sm ${
+            onClick={handleToggle}
+            disabled={isSaving}
+            className={`inline-flex items-center gap-2 px-6 py-3 rounded-full font-bold transition-all shadow-sm disabled:opacity-60 ${
               isFindMeActive 
                 ? 'bg-brand-green text-white shadow-md shadow-brand-green/30 ring-2 ring-brand-green ring-offset-2' 
                 : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900'
             }`}
           >
             <MapPin className="h-5 w-5" />
-            {isFindMeActive ? 'Find Me: Active' : 'Set as "Find Me"'}
+            {isSaving ? 'Saving...' : isFindMeActive ? 'Find Me: Active' : 'Set as "Find Me"'}
           </button>
         </div>
       </div>
@@ -55,7 +158,14 @@ const FindMe = () => {
           <ProviderMap />
         </div>
         
-        {!isFindMeActive && (
+        {locationError && (
+          <div role="alert" className="mt-4 p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 shrink-0 text-red-600" />
+            <p>{locationError}</p>
+          </div>
+        )}
+
+        {!isFindMeActive && !locationError && (
           <div className="mt-4 p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm flex items-start gap-3">
             <MapPin className="w-5 h-5 shrink-0 text-amber-600" />
             <p>You are currently hidden from the client map. Turn on "Find Me" when you are available to take immediate requests nearby.</p>

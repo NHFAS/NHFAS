@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '../../lib/utils';
 import { 
@@ -12,37 +12,80 @@ import {
   MapPin,
   Wrench,
   BadgeCheck,
-  ShieldCheck,
+  PlusCircle,
+  MessageSquareText,
+  Calculator,
+  Bell,
+  Wallet,
+  User,
 } from 'lucide-react';
 import logo from '../../assets/logo.png';
 
-const Sidebar = ({ fullName, isClientMode, onToggleMode, role }) => {
+  const Sidebar = ({ fullName, isClientMode, onToggleMode, role, open, onClose }) => {
   const location = useLocation();
 
-  const providerLinks = [
-    { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-    { name: 'My Bookings', href: '/dashboard/bookings', icon: Calendar },
-    { name: 'Services', href: '/dashboard/services', icon: Briefcase },
-    { name: 'Earnings', href: '/dashboard/earnings', icon: DollarSign },
-    { name: 'Reviews', href: '/dashboard/reviews', icon: Star },
-    { name: 'Find Me', href: '/dashboard/find-me', icon: MapPin },
-    { name: 'Verification', href: '/dashboard/verification', icon: BadgeCheck },
-    { name: 'Settings', href: '/dashboard/settings', icon: Settings },
+  // Any navigation closes the mobile drawer.
+  useEffect(() => {
+    onClose?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
+
+  const providerSections = [
+    {
+      label: 'Work',
+      items: [
+        { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+        { name: 'My Bookings', href: '/dashboard/bookings', icon: Calendar },
+        { name: 'Messages', href: '/dashboard/messages', icon: MessageSquareText },
+        { name: 'Find Me', href: '/dashboard/find-me', icon: MapPin },
+      ],
+    },
+    {
+      label: 'Grow',
+      items: [
+        { name: 'Services', href: '/dashboard/services', icon: Briefcase },
+        { name: 'Earnings', href: '/dashboard/earnings', icon: DollarSign },
+        { name: 'Reviews', href: '/dashboard/reviews', icon: Star },
+        { name: 'Verification', href: '/dashboard/verification', icon: BadgeCheck },
+      ],
+    },
+    {
+      label: 'Account',
+      items: [
+        { name: 'Notifications', href: '/dashboard/notifications', icon: Bell },
+        { name: 'Settings', href: '/dashboard/settings', icon: Settings },
+      ],
+    },
   ];
 
-  const clientLinks = [
-    { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-    { name: 'My Bookings', href: '/dashboard/bookings', icon: Calendar },
-    { name: 'Browse Services', href: '/services/handyman', icon: Wrench },
-    { name: 'Settings', href: '/dashboard/settings', icon: Settings },
+  const clientSections = [
+    {
+      label: 'Hire',
+      items: [
+        { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+        { name: 'Post a Job', href: '/dashboard/post-job', icon: PlusCircle },
+        { name: 'My Bookings', href: '/dashboard/bookings', icon: Calendar },
+        { name: 'Browse Services', href: '/dashboard/marketplace', icon: Wrench },
+      ],
+    },
+    {
+      label: 'Tools',
+      items: [
+        { name: 'Notifications', href: '/dashboard/notifications', icon: Bell },
+        { name: 'Cost Estimator', href: '/dashboard/cost-estimator', icon: Calculator },
+        { name: 'Payments', href: '/dashboard/payments', icon: Wallet },
+      ],
+    },
+    {
+      label: 'Account',
+      items: [
+        { name: 'Profile', href: '/dashboard/profile', icon: User },
+        { name: 'Settings', href: '/dashboard/settings', icon: Settings },
+      ],
+    },
   ];
 
-  const links = [
-    ...(isClientMode ? clientLinks : providerLinks),
-    ...(role === 'admin'
-      ? [{ name: 'Verification Queue', href: '/dashboard/admin/verifications', icon: ShieldCheck }]
-      : []),
-  ];
+  const sections = isClientMode ? clientSections : providerSections;
   const initials = fullName
     .split(/\s+/)
     .filter(Boolean)
@@ -52,10 +95,22 @@ const Sidebar = ({ fullName, isClientMode, onToggleMode, role }) => {
     .toUpperCase();
 
   return (
-    <aside className="w-64 bg-white border-r border-slate-200 h-screen sticky top-0 flex flex-col hidden lg:flex shrink-0">
+    <>
+      {open && (
+        <button
+          type="button"
+          aria-label="Close menu"
+          onClick={onClose}
+          className="fixed inset-0 z-40 bg-slate-900/40 lg:hidden"
+        />
+      )}
+      <aside className={cn(
+        'fixed inset-y-0 left-0 z-50 flex h-screen w-64 shrink-0 flex-col overflow-y-auto border-r border-slate-200 bg-white transition-transform duration-200 lg:static lg:z-auto lg:translate-x-0 lg:transition-none',
+        open ? 'translate-x-0 shadow-2xl' : '-translate-x-full'
+      )}>
       <div className="p-6">
         <Link to="/" className="flex items-center gap-2 cursor-pointer">
-          <img src={logo} alt="NHFAS Logo" className="h-12 w-auto object-contain" />
+          <img src="/brand/logo.svg" alt="NHFAS Logo" className="h-10 w-auto object-contain" />
           <span className="font-extrabold text-xl text-brand-navy tracking-tight">NHFAS</span>
         </Link>
       </div>
@@ -72,27 +127,33 @@ const Sidebar = ({ fullName, isClientMode, onToggleMode, role }) => {
         </div>
       </div>
 
-      <nav className="flex-1 px-4 space-y-1">
-        <p className="px-2 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Main Menu</p>
-        {links.map((link) => {
-          const isActive = location.pathname === link.href;
-          const Icon = link.icon;
-          return (
-            <Link
-              key={link.name}
-              to={link.href}
-              className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
-                isActive 
-                  ? "bg-brand-navy text-white" 
-                  : "text-slate-600 hover:bg-slate-50 hover:text-brand-navy"
-              )}
-            >
-              <Icon className={cn("w-5 h-5", isActive ? "text-brand-green" : "text-slate-400")} />
-              {link.name}
-            </Link>
-          );
-        })}
+      <nav className="flex-1 space-y-5 overflow-y-auto px-4 pb-6">
+        {sections.map((section) => (
+          <div key={section.label}>
+            <p className="px-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">{section.label}</p>
+            <div className="mt-2 space-y-1">
+              {section.items.map((link) => {
+                const isActive = location.pathname === link.href || (link.href !== '/dashboard' && location.pathname.startsWith(link.href));
+                const Icon = link.icon;
+                return (
+                  <Link
+                    key={link.name}
+                    to={link.href}
+                    className={cn(
+                      "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200",
+                      isActive
+                        ? "bg-brand-navy text-white shadow-sm"
+                        : "text-slate-600 hover:bg-slate-100 hover:text-brand-navy"
+                    )}
+                  >
+                    <Icon className={cn("h-5 w-5", isActive ? "text-brand-green" : "text-slate-400")} />
+                    {link.name}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
 
       <div className="p-4 border-t border-slate-200">
@@ -107,7 +168,8 @@ const Sidebar = ({ fullName, isClientMode, onToggleMode, role }) => {
           {isClientMode ? 'Switch to Provider' : 'Switch to Client'}
         </button>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 };
 

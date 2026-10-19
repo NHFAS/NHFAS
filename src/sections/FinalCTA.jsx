@@ -9,7 +9,7 @@ const FinalCTA = () => {
       {/* Background Image & Overlay */}
       <div className="absolute inset-0 z-0">
         <img 
-          src="https://images.unsplash.com/photo-1541625602330-2277a4c4618c?q=80&w=2000&auto=format&fit=crop" 
+          src="/illustrations/ill-haulage.svg" 
           alt="Heavy machinery at sunset" 
           className="w-full h-full object-cover object-center opacity-30"
         />
@@ -28,7 +28,7 @@ const FinalCTA = () => {
             Ready to <span className="text-brand-green">Get Started?</span>
           </h2>
           <p className="text-lg text-slate-300 mb-10 max-w-xl leading-relaxed">
-            Join thousands of customers and service providers building a stronger community, one job at a time.
+            Find services, post a job, or create a provider account to get started.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4">

@@ -1,15 +1,17 @@
 import React, { useEffect, useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import Sidebar from '../components/dashboard/Sidebar';
 import Topbar from '../components/dashboard/Topbar';
 import { supabase } from '../lib/supabase';
 
 const DashboardLayout = () => {
+  const location = useLocation();
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [profileError, setProfileError] = useState('');
   const [isProfileLoading, setIsProfileLoading] = useState(true);
   const [isClientMode, setIsClientMode] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
 
   useEffect(() => {
     let isCurrent = true;
@@ -25,7 +27,6 @@ const DashboardLayout = () => {
 
         if (!currentUser) {
           setProfile(null);
-          setIsClientMode(localStorage.getItem('nhfas-dashboard-mode:guest') === 'client');
           return;
         }
 
@@ -67,22 +68,47 @@ const DashboardLayout = () => {
   const toggleMode = () => {
     setIsClientMode((currentMode) => {
       const nextMode = !currentMode;
-      localStorage.setItem(`nhfas-dashboard-mode:${user?.id || 'guest'}`, nextMode ? 'client' : 'provider');
+      if (user) {
+        localStorage.setItem(`nhfas-dashboard-mode:${user.id}`, nextMode ? 'client' : 'provider');
+      }
       return nextMode;
     });
   };
 
+  if (isProfileLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-50 font-sans">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-green border-t-transparent" />
+          <p className="text-sm font-medium text-slate-500">Loading your workspace...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  }
+
   return (
-    <div className="flex h-screen bg-slate-50 font-sans text-slate-800 overflow-hidden">
+    <div className="flex h-screen overflow-hidden bg-slate-50 font-sans text-slate-800">
       <Sidebar
         fullName={profile?.full_name || 'Your account'}
         isClientMode={isClientMode}
         onToggleMode={toggleMode}
         role={profile?.role}
+        open={navOpen}
+        onClose={() => setNavOpen(false)}
       />
-      <div className="flex-1 flex flex-col h-full overflow-hidden">
-        <Topbar fullName={profile?.full_name || 'Your account'} isClientMode={isClientMode} onToggleMode={toggleMode} />
-        <main className="flex-1 overflow-y-auto p-4 lg:p-8">
+      <div className="flex min-w-0 flex-1 flex-col">
+        <Topbar
+          fullName={profile?.full_name || 'Your account'}
+          isClientMode={isClientMode}
+          onToggleMode={toggleMode}
+          user={user}
+          onOpenNav={() => setNavOpen(true)}
+        />
+        <main className="min-h-0 flex-1 overflow-y-auto bg-slate-50 p-4 lg:p-6">
           <Outlet context={{
             user,
             profile,

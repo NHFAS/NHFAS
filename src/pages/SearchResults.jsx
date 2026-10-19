@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ArrowRight, BriefcaseBusiness, Search, Star, UserRound } from 'lucide-react';
 import { Button } from '../components/Button';
@@ -68,8 +68,12 @@ const SearchResults = () => {
           description: 'Tools and machinery for your next job.',
         },
       ];
+
       const localServices = serviceCatalog
-        .filter((service) => `${service.title} ${service.description} ${serviceKeywords[service.id] || ''}`.toLocaleLowerCase().includes(normalizedQuery))
+        .filter((service) => {
+          const haystack = `${service.title} ${service.description} ${serviceKeywords[service.id] || ''}`.toLocaleLowerCase();
+          return haystack.includes(normalizedQuery);
+        })
         .map((service) => ({
           id: service.id,
           title: service.title,
@@ -94,11 +98,13 @@ const SearchResults = () => {
           description: 'Service category',
           href: categoryRoutes[category.category_type] || '/services/artisans',
         }));
+
         const uniqueServices = new Map();
         [...localServices, ...categoryServices].forEach((service) => {
           const key = `${service.title.toLocaleLowerCase()}|${service.href}`;
           uniqueServices.set(key, service);
         });
+
         setServiceResults([...uniqueServices.values()]);
 
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
@@ -134,6 +140,7 @@ const SearchResults = () => {
           const details = Array.isArray(provider.provider_profiles)
             ? provider.provider_profiles[0]
             : provider.provider_profiles;
+
           if (details) {
             providersById.set(provider.id, {
               id: provider.id,
@@ -147,6 +154,7 @@ const SearchResults = () => {
 
         const bioMatches = bioResponse.data || [];
         const missingProfiles = bioMatches.filter((provider) => !providersById.has(provider.user_id));
+
         if (missingProfiles.length) {
           const { data: profiles, error: profilesError } = await supabase
             .from('profiles')
@@ -187,11 +195,13 @@ const SearchResults = () => {
   const handleSubmit = (event) => {
     event.preventDefault();
     const nextQuery = searchInput.trim();
-    if (nextQuery) setSearchParams({ q: nextQuery });
+    if (nextQuery) {
+      setSearchParams({ q: nextQuery });
+    }
   };
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8 px-4 py-10 sm:px-6 lg:px-8">
+    <div className="mx-auto max-w-[1400px] space-y-8 px-4 py-10 sm:px-6 lg:px-8">
       <header>
         <p className="text-sm font-semibold uppercase tracking-[0.16em] text-brand-green">NHFAS directory</p>
         <h1 className="mt-2 text-3xl font-extrabold text-brand-navy">Search services and providers</h1>
@@ -212,7 +222,11 @@ const SearchResults = () => {
             <ArrowRight className="h-4 w-4" />
           </Button>
         </form>
-        {query && <p className="mt-3 text-sm text-slate-500">Results for <span className="font-semibold text-slate-700">“{query}”</span></p>}
+        {query && (
+          <p className="mt-3 text-sm text-slate-500">
+            Results for <span className="font-semibold text-slate-700">“{query}”</span>
+          </p>
+        )}
       </header>
 
       {!query ? (
@@ -241,12 +255,20 @@ const SearchResults = () => {
           )}
 
           {needsSignIn && (
-            <div className="flex flex-col gap-3 rounded-lg border border-sky-200 bg-sky-50 p-5 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="font-bold text-brand-navy">Looking for a provider?</h2>
-                <p className="mt-1 text-sm text-slate-600">Sign in to search provider profiles that are visible to clients.</p>
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">
+              <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-xl">
+                <h2 className="text-2xl font-extrabold text-brand-navy">Sign in to explore providers</h2>
+                <p className="mt-2 text-sm text-slate-500">Provider profiles are only shown to signed-in clients. Sign in or continue as a guest to keep browsing.</p>
+                <div className="mt-6 flex flex-wrap gap-3">
+                  <Button as={Link} to="/login" variant="primary" className="inline-flex items-center gap-2">
+                    Sign in
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                  <Button type="button" onClick={() => setNeedsSignIn(false)} variant="outline" className="inline-flex items-center gap-2">
+                    Keep browsing services
+                  </Button>
+                </div>
               </div>
-              <Button as={Link} to="/login" variant="outline" className="self-start sm:self-auto">Sign in</Button>
             </div>
           )}
 
@@ -277,6 +299,9 @@ const SearchResults = () => {
                     </div>
                     {provider.bio && <p className="mt-4 text-sm leading-5 text-slate-600">{provider.bio}</p>}
                     {provider.ratingCount > 0 && <p className="mt-3 text-xs text-slate-500">{provider.ratingCount} client reviews</p>}
+                    <Button as={Link} to={`/dashboard/provider/${provider.id}`} variant="outline" size="sm" className="mt-4 gap-2">
+                      View profile <ArrowRight className="h-4 w-4" />
+                    </Button>
                   </article>
                 ))}
               </div>
@@ -297,3 +322,4 @@ const SearchResults = () => {
 };
 
 export default SearchResults;
+

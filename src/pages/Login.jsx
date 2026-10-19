@@ -1,18 +1,32 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Mail, Lock, ArrowRight, Home } from 'lucide-react';
-import logo from '../assets/logo.png';
 import { Button } from '../components/Button';
 import { supabase } from '../lib/supabase';
 
 const Login = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [formData, setFormData] = useState({
     email: '',
     password: '',
   });
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
+
+  const handleForgotPassword = async () => {
+    if (!formData.email.trim()) {
+      setError('Enter your email above, then tap "Forgot password" again.');
+      return;
+    }
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(formData.email.trim());
+    if (resetError) setError(resetError.message);
+    else {
+      setError('');
+      setResetSent(true);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -30,39 +44,39 @@ const Login = () => {
       return;
     }
 
-    navigate('/dashboard');
+    navigate(location.state?.from || '/dashboard');
   };
 
   return (
-    <div className="min-h-screen flex bg-brand-softBlue font-sans">
-      {/* Left side - Form */}
+    <div className="min-h-screen flex bg-slate-100 font-sans">
       <div className="w-full lg:w-1/2 flex flex-col justify-center px-8 sm:px-16 lg:px-24 bg-white relative">
-        <Link to="/" className="absolute top-8 left-8 sm:left-12 flex items-center gap-2 text-slate-500 hover:text-brand-navy transition-colors">
-          <Home className="w-5 h-5" />
-          <span className="font-medium">Back to Home</span>
+        <Link to="/" className="absolute top-8 left-8 sm:left-12 inline-flex items-center gap-2 text-sm font-medium text-slate-500 transition-colors hover:text-brand-navy">
+          <Home className="w-4 h-4" />
+          <span>Back to Home</span>
         </Link>
 
-        <div className="max-w-md w-full mx-auto space-y-8 mt-12 lg:mt-0">
+        <div className="mx-auto w-full max-w-md space-y-8 pt-12 lg:pt-0">
           <div className="text-center lg:text-left">
-            <div className="flex items-center justify-center lg:justify-start gap-2 mb-6">
-              <img src={logo} alt="NHFAS Logo" className="h-14 w-auto object-contain" />
-              <span className="font-extrabold text-2xl text-brand-navy tracking-tight">NHFAS</span>
+            <div className="mb-6 flex items-center justify-center gap-3 lg:justify-start">
+              <img src="/brand/logo.svg" alt="NHFAS Logo" className="h-11 w-auto object-contain" />
+              <span className="text-2xl font-extrabold tracking-tight text-brand-navy">NHFAS</span>
             </div>
-            <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Welcome back</h1>
-            <p className="text-slate-500 mt-2">Please enter your details to sign in.</p>
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-brand-green">Welcome back</p>
+            <h1 className="mt-3 text-3xl font-bold tracking-tight text-slate-900">Sign in to your workspace</h1>
+            <p className="mt-2 text-slate-500">Access bookings, provider tools, and service requests in one place.</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6 mt-8">
+          <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700 block">Email</label>
+              <label className="block text-sm font-medium text-slate-700">Email</label>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                   <Mail className="h-5 w-5 text-slate-400" />
                 </div>
                 <input
                   type="email"
                   required
-                  className="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green outline-none transition-all"
+                  className="block w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-3 text-sm text-slate-900 outline-none transition-all focus:border-brand-green focus:bg-white focus:ring-4 focus:ring-brand-green/10"
                   placeholder="Enter your email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
@@ -71,18 +85,20 @@ const Login = () => {
             </div>
 
             <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <label className="text-sm font-medium text-slate-700 block">Password</label>
-                <a href="#" className="text-sm font-medium text-brand-green hover:text-brand-green/80">Forgot password?</a>
+              <div className="flex items-center justify-between">
+                <label className="block text-sm font-medium text-slate-700">Password</label>
+                <button type="button" onClick={handleForgotPassword} className="text-sm font-medium text-brand-green transition-colors hover:text-brand-green/80">
+                  Forgot password?
+                </button>
               </div>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                   <Lock className="h-5 w-5 text-slate-400" />
                 </div>
                 <input
                   type="password"
                   required
-                  className="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green outline-none transition-all"
+                  className="block w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-3 text-sm text-slate-900 outline-none transition-all focus:border-brand-green focus:bg-white focus:ring-4 focus:ring-brand-green/10"
                   placeholder="••••••••"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
@@ -91,46 +107,39 @@ const Login = () => {
             </div>
 
             {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
+            {resetSent && (
+              <p className="text-sm text-brand-green" role="status">
+                Password reset link sent. Check your email inbox.
+              </p>
+            )}
 
-            <Button variant="primary" className="w-full flex justify-center items-center gap-2 py-3" type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Signing in...' : 'Sign In'} <ArrowRight className="w-4 h-4" />
+            <Button variant="primary" className="w-full justify-center gap-2 py-3" type="submit" disabled={isSubmitting}>
+              {isSubmitting ? 'Signing in...' : 'Sign In'}
+              <ArrowRight className="h-4 w-4" />
             </Button>
           </form>
 
-          <div className="text-center text-sm text-slate-500 mt-8">
+          <div className="text-center text-sm text-slate-500">
             Don't have an account?{' '}
-            <Link to="/signup" className="font-semibold text-brand-green hover:text-brand-green/80 transition-colors">
-              Sign up
+            <Link to="/signup" className="font-semibold text-brand-green transition-colors hover:text-brand-green/80">
+              Create one
             </Link>
           </div>
         </div>
       </div>
 
-      {/* Right side - Image/Decoration */}
-      <div className="hidden lg:flex w-1/2 bg-brand-navy items-center justify-center p-12 relative overflow-hidden">
-        {/* Abstract Background Shapes */}
-        <div className="absolute top-0 left-0 w-full h-full opacity-10">
-          <div className="absolute w-96 h-96 bg-brand-green rounded-full blur-3xl -top-20 -left-20"></div>
-          <div className="absolute w-96 h-96 bg-brand-purple rounded-full blur-3xl bottom-20 -right-20"></div>
+      <div className="hidden w-1/2 overflow-hidden bg-gradient-to-br from-brand-navy via-[#103d6a] to-[#0b2545] lg:flex lg:items-center lg:justify-center relative">
+        <div className="absolute inset-0 opacity-20">
+          <div className="absolute -left-12 top-20 h-72 w-72 rounded-full bg-brand-green blur-3xl"></div>
+          <div className="absolute bottom-16 -right-10 h-80 w-80 rounded-full bg-brand-purple blur-3xl"></div>
         </div>
-        
-        <div className="relative z-10 max-w-lg text-white space-y-6">
-          <h2 className="text-4xl font-bold leading-tight">Manage all your services in one place.</h2>
-          <p className="text-slate-300 text-lg">Access a comprehensive suite of handyman, artisan, and haulage services tailored for you.</p>
-          
-          <div className="flex items-center gap-4 pt-8">
-            <div className="flex -space-x-4">
-              {[...Array(4)].map((_, i) => (
-                <div key={i} className={`w-10 h-10 rounded-full border-2 border-brand-navy flex items-center justify-center text-xs font-bold ${
-                  i === 0 ? 'bg-brand-green' : i === 1 ? 'bg-brand-orange' : i === 2 ? 'bg-brand-purple' : 'bg-slate-200 text-slate-800'
-                }`}>
-                  {i === 3 ? '+2k' : (
-                    <img src={`https://i.pravatar.cc/100?img=${i+10}`} alt="User" className="w-full h-full rounded-full object-cover" />
-                  )}
-                </div>
-              ))}
-            </div>
-            <p className="text-sm text-slate-300 font-medium">Join thousands of satisfied customers</p>
+
+        <div className="relative z-10 max-w-lg space-y-8 p-12 text-white">
+          <div>
+            <h2 className="text-4xl font-extrabold leading-tight">Built for a better service experience.</h2>
+            <p className="mt-4 text-lg leading-8 text-slate-200">
+              Manage jobs, discover service categories, and coordinate with the people involved in your work.
+            </p>
           </div>
         </div>
       </div>
