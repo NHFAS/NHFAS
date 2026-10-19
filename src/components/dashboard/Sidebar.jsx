@@ -18,6 +18,10 @@ import {
   Bell,
   Wallet,
   User,
+  Truck,
+  ShieldCheck,
+  FileText,
+  CreditCard,
 } from 'lucide-react';
 import logo from '../../assets/logo.png';
 
@@ -47,6 +51,8 @@ import logo from '../../assets/logo.png';
         { name: 'Earnings', href: '/dashboard/earnings', icon: DollarSign },
         { name: 'Reviews', href: '/dashboard/reviews', icon: Star },
         { name: 'Verification', href: '/dashboard/verification', icon: BadgeCheck },
+        { name: 'Fleet', href: '/dashboard/fleet', icon: Truck },
+        { name: 'Certificates', href: '/dashboard/certificates', icon: ShieldCheck },
       ],
     },
     {
@@ -73,6 +79,8 @@ import logo from '../../assets/logo.png';
       items: [
         { name: 'Notifications', href: '/dashboard/notifications', icon: Bell },
         { name: 'Cost Estimator', href: '/dashboard/cost-estimator', icon: Calculator },
+        { name: 'Insurance', href: '/dashboard/insurance', icon: FileText },
+        { name: 'Payouts', href: '/dashboard/payouts', icon: CreditCard },
         { name: 'Payments', href: '/dashboard/payments', icon: Wallet },
       ],
     },
@@ -80,6 +88,7 @@ import logo from '../../assets/logo.png';
       label: 'Account',
       items: [
         { name: 'Profile', href: '/dashboard/profile', icon: User },
+        { name: 'Certificates', href: '/dashboard/certificates', icon: ShieldCheck },
         { name: 'Settings', href: '/dashboard/settings', icon: Settings },
       ],
     },

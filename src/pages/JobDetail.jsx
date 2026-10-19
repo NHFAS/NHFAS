@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { AlertCircle, ArrowLeft, CheckCircle2, FileText, LoaderCircle, Siren, Star, Upload } from 'lucide-react';
-import { Link, useOutletContext, useParams } from 'react-router-dom';
+import { Link, useNavigate, useOutletContext, useParams } from 'react-router-dom';
 import { Button } from '../components/Button';
 import { supabase } from '../lib/supabase';
 import { StatusBadge, jobStatusMeta, jobTypeLabels } from '../lib/jobStatus';
@@ -45,6 +45,8 @@ const JobDetail = () => {
   const [permitAuthority, setPermitAuthority] = useState('');
   const [dispute, setDispute] = useState(null);
   const [latestIncident, setLatestIncident] = useState(null);
+  const [quotes, setQuotes] = useState([]);
+  const [acceptingQuote, setAcceptingQuote] = useState(false);
   const load = useCallback(async () => {
     if (!user) return;
     setIsLoading(true);
@@ -64,7 +66,7 @@ const JobDetail = () => {
       setIsLoading(false);
       return;
     }
-    const [{ data: stopRows }, { data: cargoRows }, { data: historyRows }, { data: permitRows }, { data: ratingRows }, { data: incidentRow }] = await Promise.all([
+    const [{ data: stopRows }, { data: cargoRows }, { data: historyRows }, { data: permitRows }, { data: ratingRows }, { data: incidentRow }, { data: quoteRows }] = await Promise.all([
       supabase.from('job_stops').select('*').eq('job_id', jobId).order('stop_order'),
       supabase.from('cargo_specifications').select('*').eq('job_id', jobId).maybeSingle(),
       supabase.from('job_status_history').select('*').eq('job_id', jobId).order('changed_at', { ascending: false }),
@@ -72,6 +74,7 @@ const JobDetail = () => {
       supabase.from('ratings').select('id, stars, comment').eq('job_id', jobId).eq('rater_id', user.id).maybeSingle(),
       supabase.from('safety_incidents').select('id, status, severity, created_at, emergency_sos')
         .eq('job_id', jobId).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+      supabase.from('job_quotes').select('*, provider:profiles(full_name)').eq('job_id', jobId).order('created_at', { ascending: false }),
     ]);
     setJob(jobRow);
     setStops(stopRows || []);
@@ -80,6 +83,7 @@ const JobDetail = () => {
     setPermits(permitRows || []);
     setMyRating(ratingRows || null);
     setLatestIncident(incidentRow || null);
+    setQuotes(quoteRows || []);
     const { data: disputeRow } = await supabase
       .from('disputes')
       .select('id, reason, status, created_at')
@@ -149,6 +153,23 @@ const JobDetail = () => {
     else setFlash('Job accepted. It is now in your accepted jobs.');
     await load();
     setWorking(false);
+  };
+
+  const acceptQuote = async (quoteId) => {
+    setAcceptingQuote(true);
+    setActionError('');
+    setFlash('');
+    const { error: quoteError } = await supabase.rpc('accept_job_quote', {
+      target_quote_id: quoteId,
+    });
+    if (quoteError) {
+      setActionError(quoteError.message);
+      setAcceptingQuote(false);
+      return;
+    }
+    setFlash('Quote accepted. The provider is now assigned to this job.');
+    setAcceptingQuote(false);
+    await load();
   };
 
   const openDispute = async () => {
@@ -289,6 +310,7 @@ const JobDetail = () => {
   const nextAction = isAssignedProvider ? nextStatusActions[job.status] : null;
   const canCancel = isClient && ['posted', 'matching', 'offered', 'confirmed'].includes(job.status);
   const sosVisible = (isClient || isAssignedProvider) && ['confirmed', 'en_route', 'in_progress'].includes(job.status);
+const openQuotes = quotes.filter((q) => q.status === 'submitted');
   const canRate = isClient && job.status === 'completed' && job.provider_id && !myRating;
   const canUploadPermit = isAssignedProvider && job.job_type === 'haulage'
     && ['confirmed', 'en_route', 'in_progress'].includes(job.status);
@@ -319,6 +341,39 @@ const JobDetail = () => {
           </div>
           <div className="flex flex-wrap items-start gap-2">
             {canAccept && <Button onClick={acceptJob} disabled={working} className="gap-2">Accept this job</Button>}
+            {openQuotes.length > 0 && (
+              <section aria-label="Job quotes" className="mt-6 rounded-lg border border-slate-200 bg-white p-5 sm:p-7">
+                <h2 className="text-lg font-bold text-brand-navy">Provider quotes</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Providers have submitted quotes for this job. Accept one to assign the provider.
+                </p>
+                <div className="mt-4 space-y-3">
+                  {openQuotes.map((q) => (
+                    <div key={q.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                      <div>
+                        <p className="text-sm font-semibold text-brand-navy">
+                          Quote #{q.id.slice(0, 8)} · {q.provider?.full_name || 'Provider'}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {new Intl.NumberFormat('en-ET', { style: 'currency', currency: 'ETB' }).format(q.amount)} ·
+                          {q.estimated_days ? `${q.estimated_days} days` : ''} ·
+                          {q.status}
+                        </p>
+                        {q.proposal && <p className="text-xs text-slate-500 mt-1">{q.proposal}</p>}
+                      </div>
+                      <Button
+                        onClick={() => acceptQuote(q.id)}
+                        disabled={acceptingQuote}
+                        className="gap-2"
+                      >
+                        {acceptingQuote ? <LoaderCircle size={16} className="animate-spin" /> : null}
+                        Accept quote
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
             {nextAction && (
               <Button onClick={() => advanceStatus(nextAction.to)} disabled={working} className="gap-2">
                 {working ? <LoaderCircle size={16} className="animate-spin" /> : null}

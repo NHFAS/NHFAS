@@ -51,6 +51,7 @@ const CostEstimator = () => {
   const [transportRate, setTransportRate] = useState('25');
   const [region, setRegion] = useState('Addis Ababa');
   const [contingencyPct, setContingencyPct] = useState('10');
+  const [surgePct, setSurgePct] = useState('0');
 
   const standalone = !jobId;
 
@@ -179,7 +180,8 @@ const CostEstimator = () => {
   const transportTotal = Number(transportDistance) * Number(transportRate || 0);
   const subtotal = materialsTotal + laborTotal + transportTotal;
   const contingencyTotal = subtotal * (Number(contingencyPct || 0) / 100);
-  const grandTotal = subtotal + contingencyTotal;
+  const surgeTotal = subtotal * (Number(surgePct || 0) / 100);
+  const grandTotal = subtotal + contingencyTotal + surgeTotal;
 
   return (
     <div className='mx-auto max-w-[1000px] space-y-8'>
@@ -205,6 +207,7 @@ const CostEstimator = () => {
 
         <div className='mt-6 grid gap-4 sm:grid-cols-3'>
           <div><label className='block text-sm font-medium text-slate-700 mb-2'>Contingency (%)</label><input type='number' min='0' step='1' value={contingencyPct} onChange={(e) => setContingencyPct(e.target.value)} placeholder='10' className={inputClass} /><p className='mt-1 text-xs text-slate-400'>Buffer for price changes & waste</p></div>
+          <div><label className='block text-sm font-medium text-slate-700 mb-2'>Surge pricing (%)</label><input type='number' min='0' step='1' value={surgePct} onChange={(e) => setSurgePct(e.target.value)} placeholder='0' className={inputClass} /><p className='mt-1 text-xs text-slate-400'>Demand-based multiplier</p></div>
         </div>
       </section>
 
@@ -289,6 +292,12 @@ const CostEstimator = () => {
               <div className='text-xs font-medium text-slate-500 uppercase'>Contingency ({contingencyPct}%)</div>
               <div className='text-xl font-bold text-brand-navy'>{contingencyTotal.toLocaleString()} ETB</div>
             </div>
+            {Number(surgePct || 0) > 0 && (
+              <div className='p-4 bg-amber-50 rounded-lg border border-amber-100'>
+                <div className='text-xs font-medium text-amber-600 uppercase'>Surge pricing ({surgePct}%)</div>
+                <div className='text-xl font-bold text-brand-navy'>{surgeTotal.toLocaleString()} ETB</div>
+              </div>
+            )}
           </div>
 
           <div>

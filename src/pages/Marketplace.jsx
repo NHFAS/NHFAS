@@ -18,6 +18,14 @@ const Marketplace = () => {
   const [categories, setCategories] = useState([]);
   const [featured, setFeatured] = useState([]);
   const [loadError, setLoadError] = useState('');
+  const [surgePct, setSurgePct] = useState('0');
+
+  useEffect(() => {
+    // Demo surge model: higher multiplier during peak demand windows.
+    const hour = new Date().getHours();
+    const peak = [7, 8, 17, 18, 19].includes(hour);
+    setSurgePct(peak ? '25' : '0');
+  }, []);
 
   useEffect(() => {
     let isCurrent = true;
@@ -71,6 +79,11 @@ const Marketplace = () => {
         <div className="grid gap-8 p-8 lg:grid-cols-[1.2fr_0.8fr] lg:p-10">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-300">Marketplace</p>
+            {Number(surgePct || 0) > 0 && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 text-amber-700 text-xs font-bold px-2.5 py-1 mt-1">
+                Surge pricing +{surgePct}%
+              </span>
+            )}
             <h1 className="mt-4 text-3xl font-extrabold tracking-tight text-white md:text-4xl">
               Find a service for every job.
             </h1>

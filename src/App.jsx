@@ -31,6 +31,10 @@ import Marketplace from './pages/Marketplace';
 import Notifications from './pages/Notifications';
 import Payments from './pages/Payments';
 import Messages from './pages/Messages';
+import InsurancePage from './pages/InsurancePage';
+import PayoutPage from './pages/PayoutPage';
+import CertificatesPage from './pages/CertificatesPage';
+import FleetPage from './pages/FleetPage';
 
 // Dedicated admin console (standalone — not part of the public site shell).
 import AdminLogin from './admin/AdminLogin';
@@ -143,6 +147,10 @@ function App() {
           <Route path="search" element={<SearchResults />} />
           <Route path="verification" element={<Verification />} />
           <Route path="provider/:userId" element={<PublicProvider />} />
+          <Route path="insurance" element={<InsurancePage />} />
+          <Route path="payouts" element={<PayoutPage />} />
+          <Route path="certificates" element={<CertificatesPage />} />
+          <Route path="fleet" element={<FleetPage />} />
         </Route>
 
         {/* Dedicated admin console — the only way in is typing /admin12login */}

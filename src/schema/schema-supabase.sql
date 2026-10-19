@@ -2057,3 +2057,371 @@ $$;
 grant execute on function public.log_pricing_snapshot(uuid, uuid, text, text, numeric, numeric, numeric, numeric) to authenticated;
 
 
+-- ---------------------------------------------------------------------
+-- Additive RPCs for Phase 2 member flows (FR-17 insurance, FR-08 quote
+-- acceptance, FR-23 payouts, FR-15 certificates, FR-20 telematics,
+-- FR-26 emissions, FR-18 apprenticeship).
+-- Pure additions — no existing tables or policies are modified. Each
+-- exists because RLS on the target table intentionally has no client
+-- INSERT/UPDATE policy (see comments on each function).
+-- ---------------------------------------------------------------------
+
+-- FR-17: insurance_policies is SELECT-only for participants (a partner
+-- underwriting service will insert policies later), so the client asks
+-- for a demo quote through this definer function.
+create or replace function public.request_job_insurance(
+  target_job_id uuid,
+  coverage_amount numeric default null
+) returns public.insurance_policies
+language plpgsql security definer set search_path = public
+as $$
+declare
+  job_row public.jobs;
+  result public.insurance_policies;
+  coverage numeric;
+  premium numeric;
+begin
+  select * into job_row from public.jobs where id = target_job_id for update;
+  if job_row.id is null then raise exception 'Job not found'; end if;
+  if auth.uid() is distinct from job_row.client_id and auth.uid() is distinct from job_row.provider_id then
+    raise exception 'Only job participants can request insurance';
+  end if;
+  if exists (select 1 from public.insurance_policies where job_id = target_job_id) then
+    raise exception 'This job already has an insurance policy';
+  end if;
+
+  coverage := coalesce(coverage_amount, job_row.agreed_price, 1000);
+  if coverage <= 0 then coverage := 1000; end if;
+  -- Demo premium rule: 3% of cover, minimum 50 ETB (partner API later).
+  premium := greatest(50, round(coverage * 0.03, 2));
+
+  insert into public.insurance_policies (job_id, provider, coverage_amount, premium, status)
+  values (target_job_id, 'NHFAS Demo Insurer', coverage, premium, 'quoted')
+  returning * into result;
+
+  return result;
+end;
+$$;
+grant execute on function public.request_job_insurance(uuid, numeric) to authenticated;
+
+
+-- FR-08: job_quotes has "with check (provider_id = auth.uid())" so the
+-- CLIENT cannot flip a quote to accepted — this definer RPC does the
+-- accept atomically (quote accepted, rivals rejected, job assigned).
+create or replace function public.accept_job_quote(target_quote_id uuid)
+returns public.jobs
+language plpgsql security definer set search_path = public
+as $$
+declare
+  quote_row public.job_quotes;
+  job_row public.jobs;
+  previous_status public.job_status;
+  result public.jobs;
+begin
+  select * into quote_row from public.job_quotes where id = target_quote_id for update;
+  if quote_row.id is null then raise exception 'Quote not found'; end if;
+  if quote_row.status <> 'submitted' then raise exception 'This quote is no longer open for acceptance'; end if;
+
+  select * into job_row from public.jobs where id = quote_row.job_id for update;
+  if job_row.id is null then raise exception 'Job not found'; end if;
+  if auth.uid() is distinct from job_row.client_id then
+    raise exception 'Only the client can accept a quote';
+  end if;
+  if job_row.provider_id is not null then
+    raise exception 'This job already has an assigned provider';
+  end if;
+
+  previous_status := job_row.status;
+
+  update public.job_quotes set status = 'accepted' where id = target_quote_id;
+  update public.job_quotes
+     set status = 'rejected'
+   where job_id = quote_row.job_id and id <> target_quote_id and status = 'submitted';
+
+  update public.jobs
+     set provider_id = quote_row.provider_id,
+         agreed_price = quote_row.amount,
+         status = 'confirmed',
+         availability_status = 'unavailable'
+   where id = quote_row.job_id
+  returning * into result;
+
+  insert into public.job_status_history (job_id, from_status, to_status, changed_by, reason)
+  values (result.id, previous_status, 'confirmed', auth.uid(), 'Client accepted a quote');
+
+  insert into public.notifications (user_id, title, body, notification_type, data)
+  values (
+    quote_row.provider_id,
+    'Quote accepted',
+    format('Your quote of %s ETB on "%s" was accepted. The job is now confirmed.', quote_row.amount, job_row.title),
+    'in_app',
+    jsonb_build_object('job_id', result.id, 'type', 'quote_accepted')
+  );
+
+  return result;
+end;
+$$;
+grant execute on function public.accept_job_quote(uuid) to authenticated;
+
+-- FR-23: payouts has no client INSERT policy (payment partner settles
+-- rows later); providers request withdrawals through this definer RPC.
+create or replace function public.request_payout(
+  target_account_id uuid,
+  amount numeric
+) returns public.payouts
+language plpgsql security definer set search_path = public
+as $$
+declare
+  account_row public.payout_accounts;
+  released_total numeric;
+  pending_total numeric;
+  available numeric;
+  result public.payouts;
+begin
+  if amount is null or amount <= 0 then raise exception 'Enter an amount greater than zero'; end if;
+
+  select * into account_row from public.payout_accounts where id = target_account_id;
+  if account_row.id is null then raise exception 'Payout account not found'; end if;
+  if account_row.user_id is distinct from auth.uid() then
+    raise exception 'That payout account does not belong to you';
+  end if;
+
+  select coalesce(sum(released_amount), 0) into released_total
+  from public.escrow_accounts where payee_id = auth.uid();
+  select coalesce(sum(amount), 0) into pending_total
+  from public.payouts where payee_id = auth.uid() and status in ('pending', 'processing');
+  available := released_total - pending_total;
+
+  if amount > available then
+    raise exception 'Requested amount (%) exceeds available balance (%)', amount, available;
+  end if;
+
+  insert into public.payouts (payee_id, payout_account_id, amount, status)
+  values (auth.uid(), target_account_id, amount, 'pending')
+  returning * into result;
+
+  return result;
+end;
+$$;
+grant execute on function public.request_payout(uuid, numeric) to authenticated;
+
+
+-- FR-15: digital_certificates is SELECT-only for the owner/admin, so a
+-- completed job mints its certificate through this definer function.
+-- The QR payload is a stable verification URL path.
+create or replace function public.issue_job_certificate(
+  target_job_id uuid,
+  cert_type text default 'completion'
+) returns public.digital_certificates
+language plpgsql security definer set search_path = public
+as $$
+declare
+  job_row public.jobs;
+  existing public.digital_certificates;
+  new_number text;
+  payload text;
+  result public.digital_certificates;
+begin
+  if cert_type not in ('authenticity', 'completion') then
+    raise exception 'Members can issue authenticity or completion certificates';
+  end if;
+
+  select * into job_row from public.jobs where id = target_job_id for update;
+  if job_row.id is null then raise exception 'Job not found'; end if;
+  if not public.is_job_participant(target_job_id) then
+    raise exception 'Only job participants can issue certificates';
+  end if;
+  if cert_type = 'completion' and job_row.status <> 'completed' then
+    raise exception 'Completion certificates require a completed job';
+  end if;
+
+  select * into existing
+  from public.digital_certificates
+  where job_id = target_job_id and owner_id = auth.uid() and certificate_type = cert_type
+    and revoked_at is null;
+  if existing.id is not null then
+    return existing;
+  end if;
+
+  new_number := 'NHFC-' || to_char(now(), 'YYYY') || '-' ||
+                upper(substring(replace(gen_random_uuid()::text, '-', '') from 1 for 10));
+  payload := jsonb_build_object(
+    'certificate_number', new_number,
+    'job_number', job_row.job_number,
+    'type', cert_type
+  )::text;
+
+  insert into public.digital_certificates (job_id, owner_id, certificate_type, certificate_number, qr_payload)
+  values (target_job_id, auth.uid(), cert_type, new_number, payload)
+  returning * into result;
+
+  return result;
+end;
+$$;
+grant execute on function public.issue_job_certificate(uuid, text) to authenticated;
+
+-- FR-15 public verification: anyone holding the QR code can check the
+-- certificate number without an account (granted to anon as well).
+create or replace function public.verify_certificate(target_certificate_number text)
+returns table (
+  certificate_id uuid,
+  cert_number text,
+  cert_type text,
+  issued_at timestamptz,
+  revoked_at timestamptz,
+  job_number bigint,
+  owner_name text
+)
+language plpgsql security definer set search_path = public
+as $$
+begin
+  return query
+  select c.id, c.certificate_number, c.certificate_type, c.issued_at, c.revoked_at,
+         j.job_number, p.full_name
+  from public.digital_certificates c
+  left join public.jobs j on j.id = c.job_id
+  left join public.profiles p on p.id = c.owner_id
+  where c.certificate_number = upper(trim(target_certificate_number));
+end;
+$$;
+grant execute on function public.verify_certificate(text) to anon;
+grant execute on function public.verify_certificate(text) to authenticated;
+
+-- FR-20: telematics_events has no client INSERT (events stream in from
+-- OBD dongles later); owners upload manual readings through this RPC.
+create or replace function public.log_telematics_event(
+  target_vehicle_id uuid,
+  event_type text,
+  payload jsonb default '{}'::jsonb
+) returns bigint
+language plpgsql security definer set search_path = public
+as $$
+declare
+  new_id bigint;
+begin
+  if not public.is_vehicle_owner(target_vehicle_id) and not public.is_admin() then
+    raise exception 'Only the vehicle owner can log telematics events';
+  end if;
+  if event_type is null or length(trim(event_type)) < 2 then
+    raise exception 'Event type is required';
+  end if;
+
+  insert into public.telematics_events (vehicle_id, event_type, payload)
+  values (target_vehicle_id, trim(event_type), coalesce(payload, '{}'::jsonb))
+  returning id into new_id;
+
+  -- Maintenance-class events flag the vehicle until serviced.
+  if event_type in ('maintenance_due', 'fault_code', 'inspection_failed') then
+    update public.vehicles set maintenance_blocked = true where id = target_vehicle_id;
+  end if;
+  if event_type in ('service_completed', 'inspection_passed') then
+    update public.vehicles set maintenance_blocked = false where id = target_vehicle_id;
+  end if;
+
+  return new_id;
+end;
+$$;
+grant execute on function public.log_telematics_event(uuid, text, jsonb) to authenticated;
+
+
+-- FR-26: sustainability_records is SELECT-only for participants, so
+-- emissions are logged through this definer function. CO2e uses the
+-- fuel-litre factor (2.31 kg CO2e per litre of diesel) by default.
+create or replace function public.log_sustainability_record(
+  target_job_id uuid,
+  distance_km numeric,
+  fuel_litres numeric,
+  calculation_method text default 'fuel_litre_diesel_2.31'
+) returns public.sustainability_records
+language plpgsql security definer set search_path = public
+as $$
+declare
+  co2e numeric;
+  result public.sustainability_records;
+begin
+  if distance_km is null or distance_km < 0 or fuel_litres is null or fuel_litres < 0 then
+    raise exception 'Distance and fuel must be zero or positive';
+  end if;
+  if not public.is_job_participant(target_job_id) and not public.is_admin() then
+    raise exception 'Only job participants can log emissions';
+  end if;
+
+  co2e := round(fuel_litres * 2.31, 2);
+
+  insert into public.sustainability_records (job_id, distance_km, fuel_litres, co2e_kg, calculation_method)
+  values (target_job_id, distance_km, fuel_litres, co2e, calculation_method)
+  returning * into result;
+
+  return result;
+end;
+$$;
+grant execute on function public.log_sustainability_record(uuid, numeric, numeric, text) to authenticated;
+
+-- FR-18: apprenticeship_enrollments is SELECT-only for members, so
+-- enrollment and progress transitions run through these definer RPCs.
+create or replace function public.enroll_apprenticeship(
+  skill_name text,
+  mentor_id uuid default null
+) returns public.apprenticeship_enrollments
+language plpgsql security definer set search_path = public
+as $$
+declare
+  result public.apprenticeship_enrollments;
+begin
+  if skill_name is null or length(trim(skill_name)) < 2 then
+    raise exception 'Name the skill you want to learn';
+  end if;
+  if mentor_id is not null and not exists (
+    select 1 from public.profiles where id = mentor_id and role in ('service_provider', 'heavy_operator', 'admin')
+  ) then
+    raise exception 'Mentor must be a registered provider';
+  end if;
+  if exists (
+    select 1 from public.apprenticeship_enrollments
+    where apprentice_id = auth.uid() and lower(skill_name) = lower(trim(enroll_apprenticeship.skill_name))
+      and status = 'active'
+  ) then
+    raise exception 'You are already enrolled in this skill';
+  end if;
+
+  insert into public.apprenticeship_enrollments (apprentice_id, mentor_id, skill_name)
+  values (auth.uid(), mentor_id, trim(skill_name))
+  returning * into result;
+
+  return result;
+end;
+$$;
+grant execute on function public.enroll_apprenticeship(text, uuid) to authenticated;
+
+create or replace function public.set_apprenticeship_status(
+  target_id uuid,
+  new_status text
+) returns public.apprenticeship_enrollments
+language plpgsql security definer set search_path = public
+as $$
+declare
+  enrollment public.apprenticeship_enrollments;
+  result public.apprenticeship_enrollments;
+begin
+  if new_status not in ('active', 'completed', 'withdrawn') then
+    raise exception 'Invalid apprenticeship status';
+  end if;
+
+  select * into enrollment from public.apprenticeship_enrollments where id = target_id for update;
+  if enrollment.id is null then raise exception 'Enrollment not found'; end if;
+  if auth.uid() is distinct from enrollment.apprentice_id and auth.uid() is distinct from enrollment.mentor_id then
+    raise exception 'Only the apprentice or mentor can update this enrollment';
+  end if;
+
+  update public.apprenticeship_enrollments
+     set status = new_status,
+         completed_at = case when new_status = 'completed' then current_date else null end
+   where id = target_id
+  returning * into result;
+
+  return result;
+end;
+$$;
+grant execute on function public.set_apprenticeship_status(uuid, text) to authenticated;
+
+
