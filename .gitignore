@@ -49,3 +49,10 @@ Thumbs.db
 *.tmp
 *.temp
 *.bak
+
+# SRS working docs
+srs/
+
+# Schema scratch/fix scripts
+src/schema/fix-rls-policy-recursion.sql
+src/schema/seed-service-categories.sql
