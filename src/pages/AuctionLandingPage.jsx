@@ -3,11 +3,13 @@ import {
   ArrowRight,
   Clock,
   Gavel,
+  LoaderCircle,
   Palette,
   ShieldCheck,
   Timer,
   TrendingUp,
 } from 'lucide-react';
+
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../components/Button';
 import { supabase } from '../lib/supabase';
@@ -75,7 +77,14 @@ const AuctionLandingPage = () => {
   const [timeLeft, setTimeLeft] = useState({});
   const [userWinning, setUserWinning] = useState({});
   const [isLoading, setIsLoading] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState('');
+  const [createForm, setCreateForm] = useState({
+    title: '', description: '', starting_price: '', reserve_price: '', duration_hours: '24',
+  });
   const navigate = useNavigate();
+
 
   useEffect(() => {
     let current = true;
@@ -128,7 +137,60 @@ const AuctionLandingPage = () => {
     return () => { current = false; clearInterval(t); };
   }, [auctions]);
 
+  const setCreate = (key) => (event) => setCreateForm((current) => ({ ...current, [key]: event.target.value }));
+
+  // Sellers list an item by creating the backing job first (FR-05):
+  // auction_listings.job_id is required, so each auction is anchored to a
+  // custom_build job the platform can fulfil after the hammer falls.
+  const createAuction = async (event) => {
+    event.preventDefault();
+    setCreateError('');
+    const starting = Number(createForm.starting_price);
+    const reserve = createForm.reserve_price ? Number(createForm.reserve_price) : null;
+    const hours = Number(createForm.duration_hours);
+    if (!createForm.title.trim()) { setCreateError('Enter a title for the auction item.'); return; }
+    if (!starting || starting <= 0) { setCreateError('Enter a valid starting price in ETB.'); return; }
+    if (reserve != null && reserve < starting) { setCreateError('The reserve price cannot be below the starting price.'); return; }
+    if (!hours || hours < 1 || hours > 72) { setCreateError('Auction duration must be between 1 and 72 hours.'); return; }
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData?.user) { navigate('/login'); return; }
+    setCreating(true);
+    try {
+      const { data: job, error: jobError } = await supabase.from('jobs').insert({
+        client_id: userData.user.id,
+        job_type: 'custom_build',
+        booking_mode: 'instant',
+        status: 'posted',
+        title: createForm.title.trim(),
+        description: createForm.description.trim() || null,
+      }).select('id').single();
+      if (jobError) throw new Error(jobError.message);
+      const startsAt = new Date();
+      const endsAt = new Date(startsAt.getTime() + hours * 60 * 60 * 1000);
+      const { data: listing, error: listingError } = await supabase.from('auction_listings').insert({
+        job_id: job.id,
+        seller_id: userData.user.id,
+        title: createForm.title.trim(),
+        description: createForm.description.trim() || null,
+        starting_price: starting,
+        reserve_price: reserve,
+        starts_at: startsAt.toISOString(),
+        ends_at: endsAt.toISOString(),
+        status: 'open',
+      }).select('id').single();
+      if (listingError) {
+        await supabase.from('jobs').delete().eq('id', job.id);
+        throw new Error(listingError.message);
+      }
+      navigate(`/auction/${listing.id}`);
+    } catch (err) {
+      setCreateError(err?.message || 'The auction could not be created. Please try again.');
+      setCreating(false);
+    }
+  };
+
   if (isLoading) {
+
     return (
       <main className="mx-auto max-w-5xl px-4 py-12 sm:px-6 lg:px-8">
         <div className="animate-pulse rounded-xl bg-slate-700/30 h-96"></div>
@@ -156,10 +218,55 @@ const AuctionLandingPage = () => {
       <section>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold text-brand-navy">Live auctions</h2>
-          <Button as={Link} to="/dashboard/post-job" variant="outline" className="gap-2">
-            <ArrowRight className="h-4 w-4" /> List an auction item
+          <Button type="button" onClick={() => setShowCreate((open) => !open)} variant="outline" className="gap-2" aria-expanded={showCreate}>
+            <ArrowRight className="h-4 w-4" /> {showCreate ? 'Hide form' : 'List an auction item'}
           </Button>
         </div>
+        {showCreate && (
+          <form onSubmit={createAuction} className="mb-6 space-y-4 rounded-xl border border-slate-200 bg-white p-5 sm:p-6" aria-label="Create auction listing">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="block space-y-1.5 text-sm font-medium text-slate-700 sm:col-span-2">
+                Item title *
+                <input type="text" maxLength={120} required value={createForm.title} onChange={setCreate('title')}
+                  placeholder="Handmade mahogany dining table"
+                  className="block w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-brand-green focus:outline-none focus:ring-2 focus:ring-brand-green/20" />
+              </label>
+              <label className="block space-y-1.5 text-sm font-medium text-slate-700 sm:col-span-2">
+                Description
+                <textarea rows={3} maxLength={2000} value={createForm.description} onChange={setCreate('description')}
+                  placeholder="Materials, dimensions, delivery terms..."
+                  className="block w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-brand-green focus:outline-none focus:ring-2 focus:ring-brand-green/20" />
+              </label>
+              <label className="block space-y-1.5 text-sm font-medium text-slate-700">
+                Starting price (ETB) *
+                <input type="number" min="1" step="0.01" required value={createForm.starting_price} onChange={setCreate('starting_price')}
+                  className="block w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-brand-green focus:outline-none focus:ring-2 focus:ring-brand-green/20" />
+              </label>
+              <label className="block space-y-1.5 text-sm font-medium text-slate-700">
+                Reserve price (ETB, optional)
+                <input type="number" min="0" step="0.01" value={createForm.reserve_price} onChange={setCreate('reserve_price')}
+                  className="block w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-brand-green focus:outline-none focus:ring-2 focus:ring-brand-green/20" />
+              </label>
+              <label className="block space-y-1.5 text-sm font-medium text-slate-700">
+                Duration (hours) *
+                <input type="number" min="1" max="72" required value={createForm.duration_hours} onChange={setCreate('duration_hours')}
+                  className="block w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-brand-green focus:outline-none focus:ring-2 focus:ring-brand-green/20" />
+              </label>
+            </div>
+            {createError && (
+              <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-700">{createError}</p>
+            )}
+            <div className="flex justify-end">
+              <Button type="submit" disabled={creating} className="gap-2">
+                {creating ? <LoaderCircle size={16} className="animate-spin" /> : <Gavel size={16} />}
+                {creating ? 'Creating...' : 'Start auction'}
+              </Button>
+            </div>
+            <p className="text-xs text-slate-500">
+              The auction starts immediately and runs live with anti-sniping protection. A backing job is created automatically so the winning bid can move straight into escrow.
+            </p>
+          </form>
+        )}
         {openAuctions.length === 0 ? (
           <p className="text-slate-500">No live auctions right now. Check back soon.</p>
         ) : (

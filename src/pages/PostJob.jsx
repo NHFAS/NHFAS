@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
-import { LoaderCircle, Send, Hammer, Truck } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { LoaderCircle, Send, Hammer, Truck, TrendingUp } from 'lucide-react';
 import { Link, useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import { Button } from '../components/Button';
 import { supabase } from '../lib/supabase';
+import { computeMarketPrice, logFairPriceSnapshot, surgeLabel } from '../lib/fairPrice';
 
 const inputClass = 'block w-full rounded-lg border border-slate-200 px-3 py-3 text-sm focus:border-brand-green focus:outline-none focus:ring-2 focus:ring-brand-green/20';
 
@@ -22,6 +23,10 @@ const PostJob = () => {
     agreed_price: '', scheduled_start: '', cargo_description: '', weight_kg: '', length_m: '', width_m: '',
     height_m: '', is_hazardous: false, is_oversize: false,
   });
+  const [selectedClassId, setSelectedClassId] = useState('');
+  const [oversizeAck, setOversizeAck] = useState(false);
+  const [hazmatAck, setHazmatAck] = useState(false);
+  const [market, setMarket] = useState(null);
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -55,6 +60,28 @@ const PostJob = () => {
   const suggestedClass = weight && weight > 0
     ? vehicleClasses.find((vehicleClass) => vehicleClass.rated_payload_kg >= weight)
     : null;
+  const selectedClass = vehicleClasses.find((vehicleClass) => vehicleClass.id === selectedClassId) || null;
+  const lengthM = form.length_m ? Number(form.length_m) : null;
+  const widthM = form.width_m ? Number(form.width_m) : null;
+  // Standard envelope: anything longer than a 13.6 m trailer or wider
+  // than 3.05 m is an oversize load and needs the permit pathway (FR-03).
+  const exceedsStandardEnvelope = (lengthM != null && lengthM > 13.6) || (widthM != null && widthM > 3.05);
+  const payloadExceeded = Boolean(selectedClass && weight && weight > selectedClass.rated_payload_kg);
+
+  // FR-19 fair-price reference for the chosen category (async, best-effort).
+  useEffect(() => {
+    let active = true;
+    if (!form.category_id) { setMarket(null); return () => { active = false; }; }
+    computeMarketPrice(form.category_id).then((result) => { if (active) setMarket(result); });
+    return () => { active = false; };
+  }, [form.category_id]);
+
+  const fairBand = useMemo(() => {
+    if (!market || !market.basePrice) return null;
+    const base = form.agreed_price ? Number(form.agreed_price) : market.basePrice;
+    const mid = Math.round(base * market.surge);
+    return { min: Math.round(mid * 0.9), mid, max: Math.round(mid * 1.1) };
+  }, [market, form.agreed_price]);
 
   const kindCategories = categories.filter((category) => (
     kind === 'haulage' ? category.category_type === 'haulage' : category.category_type !== 'haulage'
@@ -71,6 +98,24 @@ const PostJob = () => {
     try {
       if (kind === 'haulage' && (!weight || weight <= 0)) {
         throw new Error('Enter the cargo weight in kilograms.');
+      }
+      // FR-03 / FR-12 payload & permit compliance gates.
+      if (kind === 'haulage') {
+        if (!selectedClass) {
+          throw new Error('Select the vehicle class that will carry this load — dispatch is matched on class payload.');
+        }
+        if (payloadExceeded) {
+          throw new Error(`${selectedClass.name} is rated for ${selectedClass.rated_payload_kg.toLocaleString()} kg, below your ${weight.toLocaleString()} kg cargo. Choose a heavier class.`);
+        }
+        if (exceedsStandardEnvelope && !form.is_oversize) {
+          throw new Error('The cargo dimensions exceed the standard trailer envelope (13.6 m long / 3.05 m wide). Tick "Oversize load" so compliance can issue the permit.');
+        }
+        if (form.is_oversize && !oversizeAck) {
+          throw new Error('Acknowledge the oversize-permit requirement before posting an oversize load.');
+        }
+        if (form.is_hazardous && !hazmatAck) {
+          throw new Error('Acknowledge the hazardous-materials permit requirement before posting this load.');
+        }
       }
       const { data: job, error: jobError } = await supabase.from('jobs').insert({
         client_id: user.id,
@@ -106,6 +151,20 @@ const PostJob = () => {
           is_oversize: form.is_oversize,
         });
         if (cargoError) throw new Error(cargoError.message);
+      }
+
+      // FR-19: record how the fair-price band was framed for this job.
+      if (market && market.basePrice > 0) {
+        await logFairPriceSnapshot({
+          jobId: job.id,
+          categoryId: form.category_id || null,
+          origin: kind === 'haulage' ? form.pickup_address.trim() || null : form.service_address.trim() || null,
+          destination: kind === 'haulage' ? form.dropoff_address.trim() || null : null,
+          basePrice: market.basePrice,
+          surge: market.surge,
+          fairMin: fairBand?.min ?? null,
+          fairMax: fairBand?.max ?? null,
+        });
       }
 
       navigate(`/dashboard/jobs/${job.id}`);
@@ -203,6 +262,41 @@ const PostJob = () => {
           </label>
         </div>
 
+        {/* FR-19 — surge / fair-price transparency. */}
+        {market && market.basePrice > 0 && (
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4" aria-live="polite">
+            <h3 className="flex items-center gap-2 text-sm font-bold text-emerald-900">
+              <TrendingUp className="h-4 w-4" aria-hidden="true" /> Fair price index — {surgeLabel(market.surge)}
+            </h3>
+            <dl className="mt-2 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+              <div>
+                <dt className="text-xs font-medium text-emerald-800/70">Base price</dt>
+                <dd className="font-bold text-emerald-950">{market.basePrice.toLocaleString()} ETB</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium text-emerald-800/70">Demand multiplier</dt>
+                <dd className="font-bold text-emerald-950">{market.surge.toFixed(2)}× <span className="text-xs font-medium">({market.openJobs} open job{market.openJobs === 1 ? '' : 's'})</span></dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium text-emerald-800/70">Fair range</dt>
+                <dd className="font-bold text-emerald-950">{fairBand.min.toLocaleString()}–{fairBand.max.toLocaleString()} ETB</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium text-emerald-800/70">Your budget</dt>
+                <dd className="font-bold text-emerald-950">
+                  {form.agreed_price
+                    ? (Number(form.agreed_price) < fairBand.min ? 'Below fair range'
+                      : Number(form.agreed_price) > fairBand.max ? 'Above fair range' : 'Within fair range')
+                    : '—'}
+                </dd>
+              </div>
+            </dl>
+            <p className="mt-2 text-xs text-emerald-800/80">
+              Multiplier reacts to live demand in this category and stays bounded between 0.80× and 1.50× (SRS FR-19).
+            </p>
+          </div>
+        )}
+
         {kind === 'artisan' && (
           <label className="block space-y-2 text-sm font-medium text-slate-700">
             Service address *
@@ -263,16 +357,54 @@ const PostJob = () => {
                 </div>
               </div>
 
-              {weight > 0 && suggestedClass && (
+              <label className="block space-y-2 text-sm font-medium text-slate-700">
+                Vehicle class * (dispatch is matched on class payload)
+                <select
+                  value={selectedClassId}
+                  onChange={(event) => setSelectedClassId(event.target.value)}
+                  className={inputClass}
+                  disabled={categoriesLoading}
+                  required={kind === 'haulage'}
+                >
+                  <option value="">
+                    {suggestedClass ? `Select a class (suggested: ${suggestedClass.name})` : 'Select a vehicle class'}
+                  </option>
+                  {vehicleClasses.map((vehicleClass) => (
+                    <option key={vehicleClass.id} value={vehicleClass.id}>
+                      {vehicleClass.name} — rated {vehicleClass.rated_payload_kg.toLocaleString()} kg
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {weight > 0 && suggestedClass && !selectedClassId && (
                 <div className="mt-4 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
                   <span className="font-bold">Suggested vehicle class: {suggestedClass.name}</span>{' '}
                   — rated for {suggestedClass.rated_payload_kg.toLocaleString()} kg. Calculated automatically from your cargo weight.
                 </div>
               )}
+              {payloadExceeded && (
+                <p role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-700">
+                  {selectedClass.name} is rated for {selectedClass.rated_payload_kg.toLocaleString()} kg — your {weight.toLocaleString()} kg cargo exceeds it. Choose a heavier class to continue.
+                </p>
+              )}
               {weight > 0 && !suggestedClass && (
                 <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
                   This load exceeds every standard vehicle class. Our logistics team will contact you about a specialized arrangement.
                 </div>
+              )}
+              {(form.is_oversize || exceedsStandardEnvelope) && (
+                <label className="mt-4 flex items-start gap-2 text-sm text-slate-700">
+                  <input type="checkbox" checked={oversizeAck} onChange={(event) => setOversizeAck(event.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-green focus:ring-brand-green" />
+                  <span>I understand oversize loads require an approved transport permit before the route can start (FR-03 compliance gate).</span>
+                </label>
+              )}
+              {form.is_hazardous && (
+                <label className="mt-3 flex items-start gap-2 text-sm text-slate-700">
+                  <input type="checkbox" checked={hazmatAck} onChange={(event) => setHazmatAck(event.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-green focus:ring-brand-green" />
+                  <span>I understand hazardous materials require a specialized permit and approved handling before dispatch (FR-22 compliance gate).</span>
+                </label>
               )}
             </div>
           </>

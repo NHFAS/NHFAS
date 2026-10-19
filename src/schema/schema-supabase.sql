@@ -1957,4 +1957,103 @@ end;
 $$;
 
 grant execute on function public.create_cost_estimate(uuid, numeric, numeric, numeric, jsonb) to authenticated;
+grant execute on function public.create_cost_estimate(uuid, numeric, numeric, numeric, jsonb) to authenticated;
+
+-- ---------------------------------------------------------------------
+-- Additive RPCs (FR-13 milestone rejection, FR-19 surge/fair-price log).
+-- Pure additions — no existing tables or policies are modified.
+-- ---------------------------------------------------------------------
+
+-- Client rejects a submitted milestone. escrow_milestones has no UPDATE
+-- policy for participants, so rejection goes through this definer RPC,
+-- mirroring approve_milestone. The reason is delivered to the provider
+-- as a notification (the table has no rejection_reason column).
+create or replace function public.reject_milestone(
+  target_milestone_id uuid,
+  reject_reason text default null
+) returns public.escrow_milestones
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  milestone_row public.escrow_milestones;
+  escrow_row public.escrow_accounts;
+  result public.escrow_milestones;
+begin
+  select * into milestone_row from public.escrow_milestones where id = target_milestone_id for update;
+  if milestone_row.id is null then raise exception 'Milestone not found'; end if;
+
+  select * into escrow_row from public.escrow_accounts where id = milestone_row.escrow_id;
+  if auth.uid() is distinct from escrow_row.payer_id then
+    raise exception 'Only the client can reject milestones';
+  end if;
+  if milestone_row.status <> 'submitted' then
+    raise exception 'Only submitted milestones can be rejected';
+  end if;
+
+  update public.escrow_milestones
+     set status = 'rejected'
+   where id = target_milestone_id
+  returning * into result;
+
+  insert into public.notifications (user_id, title, body, notification_type, data)
+  values (
+    escrow_row.payee_id,
+    'Milestone rejected',
+    format('Milestone "%s" was rejected.%s', milestone_row.title,
+      case when reject_reason is not null and length(trim(reject_reason)) > 0
+           then ' Reason: ' || trim(reject_reason)
+           else '' end),
+    'in_app',
+    jsonb_build_object('type', 'milestone_rejected', 'milestone_id', target_milestone_id)
+  );
+
+  return result;
+end;
+$$;
+
+grant execute on function public.reject_milestone(uuid, text) to authenticated;
+
+-- Records a surge/fair-price calculation so admin pricing analytics can
+-- see how prices were framed to clients (pricing_snapshots has no INSERT
+-- policy for clients, hence this definer function).
+create or replace function public.log_pricing_snapshot(
+  target_job_id uuid,
+  target_category_id uuid,
+  origin_area text,
+  destination_area text,
+  base_price numeric,
+  surge_value numeric,
+  fair_min numeric,
+  fair_max numeric
+) returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  snap_id uuid;
+begin
+  if base_price is null or base_price < 0 then
+    raise exception 'base_price must be zero or positive';
+  end if;
+  if surge_value is null or surge_value <= 0 or surge_value > 5 then
+    raise exception 'surge_multiplier out of allowed bounds';
+  end if;
+
+  insert into public.pricing_snapshots
+    (job_id, service_category_id, origin_area, destination_area,
+     base_price, surge_multiplier, fair_price_min, fair_price_max)
+  values
+    (target_job_id, target_category_id, origin_area, destination_area,
+     base_price, surge_value, fair_min, fair_max)
+  returning id into snap_id;
+
+  return snap_id;
+end;
+$$;
+
+grant execute on function public.log_pricing_snapshot(uuid, uuid, text, text, numeric, numeric, numeric, numeric) to authenticated;
+
 

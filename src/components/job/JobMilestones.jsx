@@ -149,6 +149,27 @@ const JobMilestones = ({ job, user }) => {
     setMilestones(msRows || []);
   };
 
+  const rejectMilestone = async (milestone) => {
+    const reason = window.prompt('Why is this milestone being rejected? The provider will see your reason.');
+    if (!reason || reason.trim().length < 3) return;
+    setWorking(milestone.id);
+    setError('');
+    setFlash('');
+    const { error: rejectError } = await supabase.rpc('reject_milestone', {
+      target_milestone_id: milestone.id,
+      reject_reason: reason.trim(),
+    });
+    if (rejectError) setError(rejectError.message);
+    else setFlash('Milestone rejected. The provider has been notified with your reason.');
+    setWorking(null);
+    const { data: msRows } = await supabase
+      .from('escrow_milestones')
+      .select('*')
+      .eq('escrow_id', milestone.escrow_id)
+      .order('sequence_number', { ascending: true });
+    setMilestones(msRows || []);
+  };
+
   const releaseMilestone = async (milestone) => {
     if (!window.confirm('Release payment for this milestone? This cannot be undone.')) return;
     setWorking(milestone.id);
@@ -247,6 +268,9 @@ const JobMilestones = ({ job, user }) => {
                       <Button onClick={() => approveMilestone(m)} disabled={working === m.id} variant="outline" className="gap-2">
                         {working === m.id ? <LoaderCircle size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
                         Approve
+                      </Button>
+                      <Button onClick={() => rejectMilestone(m)} disabled={working === m.id} variant="outline" className="gap-2 border-red-300 text-red-700 hover:bg-red-50">
+                        Reject proof
                       </Button>
                     </div>
                   </div>

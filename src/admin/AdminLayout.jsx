@@ -7,6 +7,7 @@ import {
   Gavel,
   LayoutDashboard,
   Landmark,
+  Lock,
   LogOut,
   Menu,
   MessageSquareText,
@@ -54,6 +55,7 @@ export const adminMenu = [
       { label: 'Disputes', href: `${ADMIN_BASE}/disputes`, icon: Scale },
       { label: 'Credentials', href: `${ADMIN_BASE}/credentials`, icon: Award },
       { label: 'Verification queue', href: `${ADMIN_BASE}/verifications`, icon: ShieldCheck },
+  { label: 'Security (2FA)', href: `${ADMIN_BASE}/security`, icon: Lock },
     ],
   },
 ];

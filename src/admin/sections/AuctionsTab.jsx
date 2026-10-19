@@ -19,7 +19,7 @@ const AuctionsTab = ({ notify }) => {
         loadProfilesMap(),
         supabase.from('auction_listings').select('id, title, seller_id, starting_price, reserve_price, starts_at, ends_at, status')
           .order('ends_at', { ascending: true }).limit(200),
-        supabase.from('auction_bids').select('id, auction_id, bidder_id, amount, status, created_at')
+        supabase.from('auction_bids').select('id, auction_id, bidder_id, amount, status, fraud_score, created_at')
           .order('created_at', { ascending: false }).limit(500),
       ]);
       if (aucRes.error) throw aucRes.error;
@@ -101,7 +101,16 @@ const AuctionsTab = ({ notify }) => {
           columns={[
             { key: 'auction', label: 'Auction', render: (b) => auctions.find((a) => a.id === b.auction_id)?.title || '—' },
             { key: 'bidder', label: 'Bidder', render: (b) => names[b.bidder_id] || '—' },
-            { key: 'amount', label: 'Amount', align: 'right', render: (b) => fmtMoney(b.amount) },
+            { key: 'amount', label: 'Amount', align: 'right', render: (b) => (
+              <span className="inline-flex items-center gap-2">
+                {fmtMoney(b.amount)}
+                {b.fraud_score != null && Number(b.fraud_score) >= 0.5 && (
+                  <span className="rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-700" title={`Fraud heuristic score ${Number(b.fraud_score).toFixed(2)}`}>
+                    ⚑ flagged
+                  </span>
+                )}
+              </span>
+            ) },
             { key: 'status', label: 'Status', render: (b) => <StatusBadge value={b.status} /> },
             { key: 'created_at', label: 'Placed', render: (b) => fmtDateTime(b.created_at) },
           ]}

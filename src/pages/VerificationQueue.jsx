@@ -37,7 +37,7 @@ const VerificationQueue = () => {
       supabase.from('regulatory_permits').select('id, job_id, permit_type, permit_number, issuing_authority, valid_until, created_at')
         .eq('status', 'pending').order('created_at', { ascending: true }),
       supabase.from('safety_incidents').select('id, job_id, incident_type, severity, description, status, emergency_sos, latitude, longitude, created_at')
-        .eq('status', 'open').order('created_at', { ascending: true }),
+        .in('status', ['open', 'investigating']).order('created_at', { ascending: true }),
     ]);
     if (queryError || permitError || incidentError) setError(queryError?.message || permitError?.message || incidentError?.message);
     else {
@@ -92,15 +92,18 @@ const VerificationQueue = () => {
     setWorking(null);
   };
 
-  const resolveIncident = async (incident) => {
+  const updateIncidentStatus = async (incident, status) => {
     setWorking(incident.id);
     setError('');
-    const { error: resolveError } = await supabase.from('safety_incidents')
-      .update({ status: 'resolved', resolved_at: new Date().toISOString() }).eq('id', incident.id);
-    if (resolveError) setError(resolveError.message);
+    const patch = { status };
+    if (status === 'resolved') patch.resolved_at = new Date().toISOString();
+    const { error: updateError } = await supabase.from('safety_incidents')
+      .update(patch).eq('id', incident.id);
+    if (updateError) setError(updateError.message);
     else await loadRecords();
     setWorking(null);
   };
+  const resolveIncident = (incident) => updateIncidentStatus(incident, 'resolved');
 
   if (loading) return <div className="py-16 text-sm text-slate-500">Loading verification queue...</div>;
   if (role !== 'admin') return <p className="border-l-4 border-amber-500 bg-amber-50 px-4 py-3 text-sm text-amber-900">Administrator access is required to review provider documents.</p>;
@@ -163,9 +166,19 @@ const VerificationQueue = () => {
                     {incident.latitude != null && incident.longitude != null ? ` · Location ${Number(incident.latitude).toFixed(4)}, ${Number(incident.longitude).toFixed(4)}` : ' · No location captured'}
                   </p>
                 </div>
-                <Button onClick={() => resolveIncident(incident)} disabled={working === incident.id} variant="outline" className="h-9 shrink-0 gap-2 px-3 text-sm">
-                  <Check size={15} /> Mark resolved
-                </Button>
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide ${incident.status === 'investigating' ? 'border-amber-300 bg-amber-50 text-amber-700' : 'border-red-300 bg-red-50 text-red-700'}`}>
+                    {incident.status}
+                  </span>
+                  {incident.status === 'open' && (
+                    <Button onClick={() => updateIncidentStatus(incident, 'investigating')} disabled={working === incident.id} variant="outline" className="h-9 gap-2 px-3 text-sm">
+                      Investigate
+                    </Button>
+                  )}
+                  <Button onClick={() => resolveIncident(incident)} disabled={working === incident.id} variant="outline" className="h-9 gap-2 px-3 text-sm">
+                    <Check size={15} /> Mark resolved
+                  </Button>
+                </div>
               </article>
             ))}
           </div>

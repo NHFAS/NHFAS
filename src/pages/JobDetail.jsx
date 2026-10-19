@@ -44,6 +44,7 @@ const JobDetail = () => {
   const [permitExpiry, setPermitExpiry] = useState('');
   const [permitAuthority, setPermitAuthority] = useState('');
   const [dispute, setDispute] = useState(null);
+  const [latestIncident, setLatestIncident] = useState(null);
   const load = useCallback(async () => {
     if (!user) return;
     setIsLoading(true);
@@ -63,12 +64,14 @@ const JobDetail = () => {
       setIsLoading(false);
       return;
     }
-    const [{ data: stopRows }, { data: cargoRows }, { data: historyRows }, { data: permitRows }, { data: ratingRows }] = await Promise.all([
+    const [{ data: stopRows }, { data: cargoRows }, { data: historyRows }, { data: permitRows }, { data: ratingRows }, { data: incidentRow }] = await Promise.all([
       supabase.from('job_stops').select('*').eq('job_id', jobId).order('stop_order'),
       supabase.from('cargo_specifications').select('*').eq('job_id', jobId).maybeSingle(),
       supabase.from('job_status_history').select('*').eq('job_id', jobId).order('changed_at', { ascending: false }),
       supabase.from('regulatory_permits').select('*').eq('job_id', jobId).order('created_at', { ascending: false }),
       supabase.from('ratings').select('id, stars, comment').eq('job_id', jobId).eq('rater_id', user.id).maybeSingle(),
+      supabase.from('safety_incidents').select('id, status, severity, created_at, emergency_sos')
+        .eq('job_id', jobId).order('created_at', { ascending: false }).limit(1).maybeSingle(),
     ]);
     setJob(jobRow);
     setStops(stopRows || []);
@@ -76,6 +79,7 @@ const JobDetail = () => {
     setHistory(historyRows || []);
     setPermits(permitRows || []);
     setMyRating(ratingRows || null);
+    setLatestIncident(incidentRow || null);
     const { data: disputeRow } = await supabase
       .from('disputes')
       .select('id, reason, status, created_at')
@@ -98,6 +102,17 @@ const JobDetail = () => {
   }, [job]);
 
   const advanceStatus = async (toStatus, successMessage) => {
+    // FR-22 pre-flight gate: surface the permit requirement clearly before
+    // the enforce_haulage_permit trigger rejects the transition server-side.
+    if (toStatus === 'en_route' && job.job_type === 'haulage') {
+      const approvedPermit = permits.find((permit) => (
+        permit.status === 'approved' && (!permit.valid_until || new Date(permit.valid_until).getTime() >= Date.now())
+      ));
+      if (!approvedPermit) {
+        setActionError('Route start is blocked: upload a transport permit below and wait for compliance approval (FR-22).');
+        return;
+      }
+    }
     setWorking(true);
     setActionError('');
     setFlash('');
@@ -191,8 +206,20 @@ const JobDetail = () => {
       emergency_sos: true,
     });
     setWorking(false);
-    if (sosError) setActionError(sosError.message);
-    else setFlash('SOS sent. The NHFAS safety team has been alerted with your live location.');
+    if (sosError) { setActionError(sosError.message); return; }
+    // FR-25: alert every administrator account, not just the incident row.
+    const { data: adminRows } = await supabase.from('profiles').select('id').eq('role', 'admin');
+    if (adminRows && adminRows.length) {
+      await supabase.from('notifications').insert(adminRows.map((admin) => ({
+        user_id: admin.id,
+        title: 'Emergency SOS alert',
+        body: `SOS triggered on job #${job.job_number} by ${user.email || 'a participant'}${latitude != null ? ' — live location captured.' : '.'}`,
+        notification_type: 'in_app',
+        data: { type: 'sos', job_id: jobId },
+      })));
+    }
+    await load();
+    setFlash('SOS sent. The NHFAS safety team has been alerted with your live location.');
   };
 
   const submitPermit = async () => {
@@ -341,6 +368,12 @@ const JobDetail = () => {
         {dispute && (
           <p role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
             <span className="font-bold uppercase tracking-wide">Dispute {dispute.status}</span> — {dispute.reason}
+          </p>
+        )}
+        {latestIncident && ['open', 'investigating'].includes(latestIncident.status) && (
+          <p role="alert" className="mt-4 flex items-center gap-2 rounded-lg border border-red-300 bg-red-50 p-3 text-sm font-medium text-red-800">
+            <Siren className="h-4 w-4 shrink-0" aria-hidden="true" />
+            Safety incident on this job — status: {latestIncident.status} (reported {new Date(latestIncident.created_at).toLocaleString()}). Our safety team is on it.
           </p>
         )}
         {job.job_type === 'haulage' && isAssignedProvider && job.status === 'confirmed' && (

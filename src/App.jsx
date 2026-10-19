@@ -35,6 +35,7 @@ import Messages from './pages/Messages';
 // Dedicated admin console (standalone — not part of the public site shell).
 import AdminLogin from './admin/AdminLogin';
 import AdminLayout, { AdminSection } from './admin/AdminLayout';
+import MfaSetup from './admin/MfaSetup';
 import OverviewTab from './admin/sections/OverviewTab';
 import UsersTab from './admin/sections/UsersTab';
 import OrganizationsTab from './admin/sections/OrganizationsTab';
@@ -159,6 +160,7 @@ function App() {
           <Route path="credentials" element={<AdminSection Section={CredentialsTab} />} />
           <Route path="fleet" element={<AdminSection Section={FleetTab} />} />
           <Route path="messages" element={<AdminSection Section={MessagesTab} />} />
+          <Route path="security" element={<AdminSection Section={MfaSetup} />} />
           <Route path="verifications" element={<VerificationQueue />} />
         </Route>
         {/* Legacy admin URLs now lead only to the dedicated admin login */}

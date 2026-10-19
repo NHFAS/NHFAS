@@ -14,6 +14,9 @@ const AdminLogin = () => {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [checkingSession, setCheckingSession] = useState(true);
+  const [mfaFactor, setMfaFactor] = useState(null); // { factorId, challengeId }
+  const [mfaCode, setMfaCode] = useState('');
+  const [mfaBusy, setMfaBusy] = useState(false);
 
   // An existing administrator session skips the form entirely.
   useEffect(() => {
@@ -70,11 +73,42 @@ const AdminLogin = () => {
       if (profile?.role !== 'admin') {
         throw new Error('This account does not have administrator privileges.');
       }
+      // FR-01 — step-up: administrators with TOTP enrolled must verify a
+      // second factor before the console unlocks.
+      const { data: factorsData } = await supabase.auth.mfa.listFactors();
+      const verifiedTotp = (factorsData?.factors || []).find(
+        (factor) => factor.factor_type === 'totp' && factor.status === 'verified',
+      );
+      if (verifiedTotp) {
+        const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({ factorId: verifiedTotp.id });
+        if (challengeError) throw new Error(challengeError.message);
+        setMfaFactor({ factorId: verifiedTotp.id, challengeId: challenge.id });
+        setSubmitting(false);
+        return;
+      }
       navigate('/admin12login/panel', { replace: true });
     } catch (e) {
       setError(e.message || 'Sign in failed. Please try again.');
       setSubmitting(false);
     }
+  };
+
+  const verifyMfa = async (event) => {
+    event.preventDefault();
+    if (!mfaFactor || mfaCode.trim().length < 6) return;
+    setMfaBusy(true);
+    setError('');
+    const { error: verifyError } = await supabase.auth.mfa.verify({
+      factorId: mfaFactor.factorId,
+      challengeId: mfaFactor.challengeId,
+      code: mfaCode.trim(),
+    });
+    setMfaBusy(false);
+    if (verifyError) {
+      setError(`Two-factor code rejected: ${verifyError.message}`);
+      return;
+    }
+    navigate('/admin12login/panel', { replace: true });
   };
 
   if (checkingSession) {
@@ -117,49 +151,80 @@ const AdminLogin = () => {
             </div>
           )}
 
-          <form onSubmit={submit} className="mt-6 space-y-4" noValidate>
-            <div>
-              <label htmlFor="admin-email" className="block text-xs font-bold uppercase tracking-wide text-slate-500">Email address</label>
-              <input
-                id="admin-email"
-                type="email"
-                autoComplete="username"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                placeholder="admin@nhfas.com"
-                className={`mt-1.5 ${inputClass}`}
-              />
-            </div>
-            <div>
-              <label htmlFor="admin-password" className="block text-xs font-bold uppercase tracking-wide text-slate-500">Password</label>
-              <div className="relative mt-1.5">
+          <form onSubmit={mfaFactor ? verifyMfa : submit} className="mt-6 space-y-4" noValidate>
+            {mfaFactor ? (
+              <div>
+                <label htmlFor="admin-totp" className="block text-xs font-bold uppercase tracking-wide text-slate-500">Two-factor code</label>
                 <input
-                  id="admin-password"
-                  type={showPassword ? 'text' : 'password'}
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  placeholder="••••••••"
-                  className={`pr-11 ${inputClass}`}
+                  id="admin-totp"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  value={mfaCode}
+                  onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="123456"
+                  className={`mt-1.5 tracking-[0.4em] ${inputClass}`}
+                  autoFocus
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((visible) => !visible)}
-                  className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-slate-400 transition hover:text-slate-600 focus:outline-none"
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
+                <p className="mt-2 text-xs text-slate-500">
+                  Enter the 6-digit code from your authenticator app to finish signing in (FR-01 MFA).
+                </p>
               </div>
-            </div>
+            ) : (
+              <>
+                <div>
+                  <label htmlFor="admin-email" className="block text-xs font-bold uppercase tracking-wide text-slate-500">Email address</label>
+                  <input
+                    id="admin-email"
+                    type="email"
+                    autoComplete="username"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    placeholder="admin@nhfas.com"
+                    className={`mt-1.5 ${inputClass}`}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="admin-password" className="block text-xs font-bold uppercase tracking-wide text-slate-500">Password</label>
+                  <div className="relative mt-1.5">
+                    <input
+                      id="admin-password"
+                      type={showPassword ? 'text' : 'password'}
+                      autoComplete="current-password"
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                      placeholder="••••••••"
+                      className={`pr-11 ${inputClass}`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((visible) => !visible)}
+                      className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-slate-400 transition hover:text-slate-600 focus:outline-none"
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
             <button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || mfaBusy}
               className="flex w-full items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700 focus:outline-none focus:ring-4 focus:ring-red-500/30 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {submitting ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <LogIn className="h-4 w-4" aria-hidden="true" />}
-              {submitting ? 'Signing in…' : 'Sign in to admin panel'}
+              {submitting || mfaBusy ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <LogIn className="h-4 w-4" aria-hidden="true" />}
+              {mfaFactor ? (mfaBusy ? 'Verifying…' : 'Verify & enter panel') : (submitting ? 'Signing in…' : 'Sign in to admin panel')}
             </button>
+            {mfaFactor && (
+              <button
+                type="button"
+                onClick={() => { setMfaFactor(null); setMfaCode(''); setError(''); }}
+                className="w-full text-center text-xs font-semibold text-slate-500 hover:text-slate-700"
+              >
+                Use a different account
+              </button>
+            )}
           </form>
         </div>
 
