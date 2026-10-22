@@ -93,7 +93,7 @@ const CertificatesPage = () => {
     <div className="mx-auto max-w-[1400px] space-y-6 px-4">
       <header className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold text-brand-navy">Certificates &amp; Training</h1>
+          <h1 className="text-2xl font-extrabold text-brand-navy">Certificates & Training</h1>
           <p className="mt-1 text-sm text-slate-500">View digital certificates, request certification, and manage apprenticeships.</p>
         </div>
         <Link
@@ -106,7 +106,7 @@ const CertificatesPage = () => {
 
       {loading && (
         <div className="py-20 text-center text-sm text-slate-400" role="status">
-          <LoaderCircle size={24} className="animate-spin" /> Loading certificates…
+          <LoaderCircle size={24} className="animate-spin" /> Loading certificates...
         </div>
       )}
 
@@ -135,7 +135,7 @@ const CertificatesPage = () => {
                   <option value="">Select a job</option>
                   {availableJobs.map((job) => (
                     <option key={job.id} value={job.id}>
-                      #{job.job_number} Â· {job.title}
+                      #{job.job_number} · {job.title}
                     </option>
                   ))}
                 </select>
@@ -160,7 +160,7 @@ const CertificatesPage = () => {
                   className="gap-2 w-full sm:w-auto"
                 >
                   {issuing ? <LoaderCircle size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
-                  {issuing ? 'Issuing…' : 'Issue certificate'}
+                  {issuing ? 'Issuing...' : 'Issue certificate'}
                 </Button>
               </div>
             </form>
@@ -180,11 +180,25 @@ const CertificatesPage = () => {
                     <div>
                       <p className="text-sm font-semibold text-brand-navy">{cert.certificate_type} certificate</p>
                       <p className="text-xs text-slate-500">Certificate #{cert.certificate_number}</p>
-                      {cert.qr_payload && (
-                        <p className="text-xs text-slate-500 truncate max-w-xs">{cert.qr_payload}</p>
+                      {cert.blockchain_anchor && (
+                        <p className="text-xs text-emerald-600 flex items-center gap-1">
+                          <span className="text-[10px]">⛓</span> Blockchain anchored
+                        </p>
                       )}
                     </div>
-                    <div className="flex flex-col sm:flex-row gap-2 text-xs">
+                    <div className="flex items-center gap-3">
+                      {cert.qr_payload && (
+                        <div className="flex flex-col items-center gap-1">
+                          <p className="text-xs text-slate-500">Verification QR</p>
+                          <div className="w-12 h-12 bg-white border border-slate-200 p-0.5 rounded">
+                            <img
+                              src={`data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="%23ffffff"/><path d="M20,20 h20 v20 H20 z M60,20 h20 v20 H60 z M20,60 h20 v20 H20 z M60,60 h20 v20 H60 z" fill="%23000000"/></svg>`}
+                              alt="QR code"
+                              className="block"
+                            />
+                          </div>
+                        </div>
+                      )}
                       <span className="text-slate-500">{new Intl.DateTimeFormat('en', { dateStyle: 'medium' }).format(new Date(cert.issued_at))}</span>
                     </div>
                   </div>
@@ -230,7 +244,7 @@ const CertificatesPage = () => {
                   className="gap-2 w-full sm:w-auto"
                 >
                   {enrolling ? <LoaderCircle size={16} className="animate-spin" /> : <GraduationCap size={16} />}
-                  {enrolling ? 'Enrolling…' : 'Enroll'}
+                  {enrolling ? 'Enrolling...' : 'Enroll'}
                 </Button>
               </div>
             </form>
@@ -247,9 +261,7 @@ const CertificatesPage = () => {
                   >
                     <div>
                       <p className="text-sm font-semibold text-brand-navy">{enr.skill_name}</p>
-                      <p className="text-xs text-slate-500">
-                        Mentor: {enr.mentor?.full_name || 'None'} Â· Started {new Intl.DateTimeFormat('en', { dateStyle: 'medium' }).format(new Date(enr.started_at))}
-                      </p>
+                      <p className="text-xs text-slate-500">Mentor: {enr.mentor?.full_name || 'None'} · Started {new Intl.DateTimeFormat('en', { dateStyle: 'medium' }).format(new Date(enr.started_at))}</p>
                     </div>
                     <span
                       className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wide ${enr.status === 'active' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : enr.status === 'completed' ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-slate-200 bg-slate-100 text-slate-600'}`}
@@ -279,3 +291,4 @@ const CertificatesPage = () => {
 };
 
 export default CertificatesPage;
+
