@@ -5,6 +5,7 @@ import PlaceholderPage from './pages/PlaceholderPage';
 import LegalPage from './pages/LegalPage';
 import NotFound from './pages/NotFound';
 import CookieConsentBanner from './components/CookieConsentBanner';
+import SyncStatus from './components/offline/SyncStatus';
 
 import PublicLayout from './layout/PublicLayout';
 import DashboardLayout from './layout/DashboardLayout';
@@ -178,6 +179,7 @@ function App() {
         <Route path="*" element={<NotFound />} />
       </Routes>
       <CookieConsentBanner />
+      <SyncStatus />
     </Router>
   );
 }

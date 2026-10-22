@@ -2,7 +2,11 @@
 import ReactDOM from 'react-dom/client';
 import App from './App.jsx';
 import { I18nProvider } from './i18n/I18nContext.jsx';
+import { setupOnlineListener } from './lib/syncEngine.js';
 import './index.css';
+
+// Register offline/sync listener (SRS FR-24, NFR 5.5).
+const unsubscribeSync = setupOnlineListener();
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
