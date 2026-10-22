@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
 import { CreditCard, Banknote, AlertCircle, CheckCircle2, LoaderCircle, ArrowLeft, Plus } from 'lucide-react';
 import { Button } from '../components/Button';
@@ -27,12 +27,17 @@ const PayoutPage = () => {
   const [accountReference, setAccountReference] = useState('');
   const [selectedAccountId, setSelectedAccountId] = useState('');
   const [payoutAmount, setPayoutAmount] = useState('');
+const [financingRequests, setFinancingRequests] = useState([]);
+const [requestingFinancing, setRequestingFinancing] = useState(false);
+const [financingAmount, setFinancingAmount] = useState('');
+const [financingPurpose, setFinancingPurpose] = useState('');
+const [financingProvider, setFinancingProvider] = useState('');
 
   const load = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     setError('');
-    const [{ data: accountRows }, { data: payoutRows }] = await Promise.all([
+    const [{ data: accountRows }, { data: payoutRows }, { data: financingRows }] = await Promise.all([
       supabase
         .from('payout_accounts')
         .select('*')
@@ -102,6 +107,36 @@ const PayoutPage = () => {
     await load();
   };
 
+  const requestFinancing = async () => {
+    if (!financingAmount || !financingPurpose) {
+      setError('Please enter amount and purpose.');
+      return;
+    }
+    const amount = parseFloat(financingAmount);
+    if (!amount || amount <= 0) {
+      setError('Enter a valid financing amount.');
+      return;
+    }
+    setRequestingFinancing(true);
+    setError('');
+    const { data, error: rpcError } = await supabase.rpc('request_financing', {
+      amount,
+      purpose: financingPurpose.trim(),
+      provider: financingProvider || null,
+    });
+    if (rpcError) {
+      setError(rpcError.message);
+      setRequestingFinancing(false);
+      return;
+    }
+    setFlash('Financing request submitted. It will be reviewed by our finance team.');
+    setRequestingFinancing(false);
+    setFinancingAmount('');
+    setFinancingPurpose('');
+    setFinancingProvider('');
+    await load();
+  };
+
   return (
     <div className="mx-auto max-w-[1400px] space-y-6 px-4">
       <header className="flex items-start justify-between gap-4">
@@ -119,7 +154,7 @@ const PayoutPage = () => {
 
       {loading && (
         <div className="py-20 text-center text-sm text-slate-400" role="status">
-          <LoaderCircle size={24} className="animate-spin" /> Loading payouts…
+          <LoaderCircle size={24} className="animate-spin" /> Loading payouts�
         </div>
       )}
 
@@ -227,7 +262,7 @@ const PayoutPage = () => {
                     <option value="">Select an account</option>
                     {accounts.map((acct) => (
                       <option key={acct.id} value={acct.id}>
-                        {acct.provider} · {acct.account_reference}
+                        {acct.provider} � {acct.account_reference}
                       </option>
                     ))}
                   </select>
@@ -251,7 +286,7 @@ const PayoutPage = () => {
                     className="gap-2 w-full sm:w-auto"
                   >
                     {requesting ? <LoaderCircle size={16} className="animate-spin" /> : <Banknote size={16} />}
-                    {requesting ? 'Requesting…' : 'Request payout'}
+                    {requesting ? 'Requesting�' : 'Request payout'}
                   </Button>
                 </div>
               </form>
@@ -274,7 +309,7 @@ const PayoutPage = () => {
                         {new Intl.NumberFormat('en-ET', { style: 'currency', currency: 'ETB' }).format(payout.amount)}
                       </p>
                       <p className="text-xs text-slate-500">
-                        {payout.payout_accounts?.provider || 'Account'} · {payout.payout_accounts?.account_reference}
+                        {payout.payout_accounts?.provider || 'Account'} � {payout.payout_accounts?.account_reference}
                       </p>
                     </div>
                     <div className="flex flex-col sm:flex-row gap-2 text-xs">
@@ -289,6 +324,82 @@ const PayoutPage = () => {
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+          </section>
+
+          <section aria-label="Financing requests" className="mt-6 rounded-lg border border-slate-200 bg-white p-5 sm:p-7">
+            <h2 className="text-lg font-bold text-brand-navy">Micro-financing</h2>
+            <p className="mt-1 text-sm text-slate-500">Request financing for vehicle purchases, equipment, or working capital.</p>
+            <form onSubmit={(e) => { e.preventDefault(); requestFinancing(); }} className="mt-5 space-y-4 grid gap-4 sm:grid-cols-2 sm:items-end">
+              <label className="block space-y-1 text-sm font-medium text-slate-700">
+                Amount (ETB)
+                <input
+                  type="number"
+                  min="0"
+                  step="100"
+                  value={financingAmount}
+                  onChange={(e) => setFinancingAmount(e.target.value)}
+                  placeholder="0"
+                  className={inputClass}
+                />
+              </label>
+              <label className="block space-y-1 text-sm font-medium text-slate-700">
+                Purpose
+                <input
+                  type="text"
+                  value={financingPurpose}
+                  onChange={(e) => setFinancingPurpose(e.target.value)}
+                  placeholder="e.g. New truck, trailer, equipment"
+                  className={inputClass}
+                />
+              </label>
+              <label className="block space-y-1 text-sm font-medium text-slate-700 sm:col-span-2">
+                Financing partner (optional)
+                <input
+                  type="text"
+                  value={financingProvider}
+                  onChange={(e) => setFinancingProvider(e.target.value)}
+                  placeholder="e.g. Bank, MFI, partner"
+                  className={inputClass}
+                />
+              </label>
+              <div className="col-span-full sm:col-span-2 flex justify-end">
+                <Button
+                  type="submit"
+                  disabled={requestingFinancing || !financingAmount || !financingPurpose}
+                  className="gap-2 w-full sm:w-auto"
+                >
+                  {requestingFinancing ? <LoaderCircle size={16} className="animate-spin" /> : <Banknote size={16} />}
+                  {requestingFinancing ? 'Submitting…' : 'Request financing'}
+                </Button>
+              </div>
+            </form>
+
+            {financingRequests.length > 0 && (
+              <div className="mt-6 border-t border-slate-100 pt-4">
+                <h3 className="text-sm font-bold text-slate-700 mb-3">My financing requests</h3>
+                <div className="space-y-2">
+                  {financingRequests.map((fin) => (
+                    <div
+                      key={fin.id}
+                      className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+                    >
+                      <div>
+                        <p className="text-sm font-semibold text-brand-navy">
+                          {new Intl.NumberFormat('en-ET', { style: 'currency', currency: 'ETB' }).format(fin.amount)}
+                        </p>
+                        <p className="text-xs text-slate-500">{fin.purpose}</p>
+                      </div>
+                      <div className="flex flex-col sm:flex-row gap-2 text-xs">
+                        <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wide ${fin.status === 'approved' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : fin.status === 'rejected' ? 'border-red-200 bg-red-50 text-red-700' : fin.status === 'disbursed' ? 'border-blue-200 bg-blue-50 text-blue-700' : fin.status === 'repaid' ? 'border-green-200 bg-green-50 text-green-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
+                          {fin.status}
+                        </span>
+                        {fin.provider && <span className="text-slate-500">Partner: {fin.provider}</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </section>
