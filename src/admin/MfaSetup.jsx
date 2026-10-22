@@ -162,5 +162,3 @@ const MfaSetup = ({ notify }) => {
 };
 
 export default MfaSetup;
-
-  const verified = factors.filter((factor) => factor.status === 'verified');
