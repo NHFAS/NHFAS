@@ -20,7 +20,7 @@ const JobChat = ({ jobId, user }) => {
     if (!conversationId) return;
     const { data, error } = await supabase
       .from('messages')
-      .select('id, sender_id, body, created_at, sender:profiles(full_name)')
+      .select('id, sender_id, body, audio_url, created_at, sender:profiles(full_name)')
       .eq('conversation_id', conversationId)
       .order('created_at', { ascending: true })
       .limit(100);
@@ -127,14 +127,14 @@ const JobChat = ({ jobId, user }) => {
             )}
             {messages.map((message) => {
               const own = message.sender_id === user.id;
-              const isVoice = message.attachment_url && message.attachment_url.includes('message_attachments');
+              const isVoice = message.audio_url && message.audio_url.includes('message_attachments');
               return (
                 <div key={message.id} className={`flex ${own ? 'justify-end' : 'justify-start'}`}>
                   <div className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${own ? 'bg-brand-green text-white' : 'bg-white border border-slate-200 text-slate-700'}`}>
                     {!own && <p className="text-[11px] font-bold text-brand-navy">{message.sender?.full_name || 'Participant'}</p>}
                     {isVoice ? (
                       <div className="flex items-center gap-2">
-                        <audio controls src={message.attachment_url} className="h-6 w-full" preload="none" />
+                        <audio controls src={message.audio_url} className="h-6 w-full" preload="none" />
                       </div>
                     ) : (
                       <p className="whitespace-pre-wrap">{message.body}</p>

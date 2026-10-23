@@ -17,6 +17,7 @@ export default function VoiceNoteRecorder({ onAudioReady, className = '' }) {
   const chunksRef = useRef([]);
   const timerRef = useRef(null);
   const audioRef = useRef(null);
+  const durationRef = useRef(0);
 
   useEffect(() => {
     return () => {
@@ -42,13 +43,17 @@ export default function VoiceNoteRecorder({ onAudioReady, className = '' }) {
         const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
         const url = URL.createObjectURL(blob);
         setAudioUrl(url);
-        if (onAudioReady) onAudioReady({ blob, url, duration: Math.round(duration) });
+        if (onAudioReady) onAudioReady({ blob, url, duration: durationRef.current });
         stream.getTracks().forEach((t) => t.stop());
       };
       recorder.start();
       setRecording(true);
       setDuration(0);
-      timerRef.current = setInterval(() => setDuration((d) => d + 1), 1000);
+      durationRef.current = 0;
+      timerRef.current = setInterval(() => {
+        setDuration((d) => d + 1);
+        durationRef.current += 1;
+      }, 1000);
     } catch (err) {
       setError('Microphone access denied or unavailable.');
     }
@@ -74,6 +79,7 @@ export default function VoiceNoteRecorder({ onAudioReady, className = '' }) {
     if (audioUrl) URL.revokeObjectURL(audioUrl);
     setAudioUrl(null);
     setDuration(0);
+    durationRef.current = 0;
   };
 
   return (

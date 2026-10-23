@@ -1,4 +1,3 @@
-fix: attachment_type column removed from messages insert/read
-- Replace attachment_type: voice with audio_url: voiceUrl in insert
-- Replace message.attachment_type check with attachment_url check in read
-- All references to non-existent attachment_type column removed
+fix: voice note duration display
+- Ensure minimum duration of 1s even if recording is very short
+- Math.max(1, Math.round(duration)) prevents showing [voice note: 0s]

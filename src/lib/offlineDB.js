@@ -40,14 +40,13 @@ export async function getPendingWrites() {
   const db = await openDB();
   const tx = db.transaction(STORE_NAME, 'readonly');
   const store = tx.objectStore(STORE_NAME);
-  const index = store.index('synced');
   const items = await new Promise((resolve, reject) => {
-    const req = index.openCursor(IDBKeyRange.only(false));
+    const req = store.openCursor();
     const results = [];
     req.onsuccess = (e) => {
       const cursor = e.target.result;
       if (cursor) {
-        results.push(cursor.value);
+        if (cursor.value.synced === false) results.push(cursor.value);
         cursor.continue();
       } else resolve(results);
     };
