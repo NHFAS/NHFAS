@@ -94,7 +94,7 @@ const JobChat = ({ jobId, user }) => {
     const { error: msgError } = await supabase.from('messages').insert({
       conversation_id: conversationId,
       sender_id: user.id,
-      body: `[voice note: ${Math.round(duration)}s]`,
+      body: `[voice note: ${Math.max(1, Math.round(duration))}s]`,
       audio_url: voiceUrl,
     });
 
