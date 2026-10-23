@@ -36,6 +36,7 @@ import InsurancePage from './pages/InsurancePage';
 import PayoutPage from './pages/PayoutPage';
 import CertificatesPage from './pages/CertificatesPage';
 import FleetPage from './pages/FleetPage';
+import EmissionsPage from './pages/EmissionsPage';
 
 // Dedicated admin console (standalone — not part of the public site shell).
 import AdminLogin from './admin/AdminLogin';
@@ -152,6 +153,7 @@ function App() {
           <Route path="payouts" element={<PayoutPage />} />
           <Route path="certificates" element={<CertificatesPage />} />
           <Route path="fleet" element={<FleetPage />} />
+          <Route path="emissions" element={<EmissionsPage />} />
         </Route>
 
         {/* Dedicated admin console — the only way in is typing /admin12login */}

@@ -35,7 +35,7 @@ const Messages = () => {
 
     const { data: messageRows, error: messagesError } = await supabase
       .from('messages')
-      .select('id, conversation_id, sender_id, body, created_at, sender:profiles!messages_sender_id_fkey(full_name)')
+      .select('id, conversation_id, sender_id, body, created_at, sender:profiles(full_name)')
       .in('conversation_id', conversationRows.map((conversation) => conversation.id))
       .order('created_at', { ascending: false })
       .limit(200);

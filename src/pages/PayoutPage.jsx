@@ -48,9 +48,15 @@ const [financingProvider, setFinancingProvider] = useState('');
         .select('*, payout_accounts(provider, account_reference)')
         .eq('payee_id', user.id)
         .order('created_at', { ascending: false }),
+      supabase
+        .from('financing_requests')
+        .select('*')
+        .eq('applicant_id', user.id)
+        .order('created_at', { ascending: false }),
     ]);
     setAccounts(accountRows || []);
     setPayouts(payoutRows || []);
+    setFinancingRequests(financingRows || []);
     setLoading(false);
   }, [user]);
 

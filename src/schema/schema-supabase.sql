@@ -2424,4 +2424,84 @@ end;
 $$;
 grant execute on function public.set_apprenticeship_status(uuid, text) to authenticated;
 
+-- FR-17: insurance_claims has RLS allowing the filer to insert, but this
+-- definer RPC validates the policy exists and the filer is a participant
+-- before creating the claim record.
+create or replace function public.file_insurance_claim(
+  target_policy_id uuid,
+  description text,
+  claimed_amount numeric
+) returns public.insurance_claims
+language plpgsql security definer set search_path = public
+as $$
+declare
+  policy_row public.insurance_policies;
+  result public.insurance_claims;
+begin
+  select * into policy_row from public.insurance_policies where id = target_policy_id for update;
+  if policy_row.id is null then raise exception 'Policy not found'; end if;
+  if not public.is_job_participant(policy_row.job_id) then
+    raise exception 'Only job participants can file claims on this policy';
+  end if;
+  if claimed_amount is null or claimed_amount <= 0 then
+    raise exception 'Claimed amount must be positive';
+  end if;
+
+  insert into public.insurance_claims (policy_id, filed_by, description, claimed_amount)
+  values (target_policy_id, auth.uid(), description, claimed_amount)
+  returning * into result;
+
+  return result;
+end;
+$$;
+grant execute on function public.file_insurance_claim(uuid, text, numeric) to authenticated;
+
+-- FR-23: financing_requests has no client INSERT policy, so providers
+-- request micro-financing through this definer RPC.
+create or replace function public.request_financing(
+  amount numeric,
+  purpose text,
+  provider text default null
+) returns public.financing_requests
+language plpgsql security definer set search_path = public
+as $$
+declare
+  result public.financing_requests;
+begin
+  if amount is null or amount <= 0 then
+    raise exception 'Financing amount must be positive';
+  end if;
+  if purpose is null or length(trim(purpose)) < 3 then
+    raise exception 'Please describe the purpose of the financing';
+  end if;
+
+  insert into public.financing_requests (applicant_id, amount, purpose, provider)
+  values (auth.uid(), amount, trim(purpose), provider)
+  returning * into result;
+
+  return result;
+end;
+$$;
+grant execute on function public.request_financing(numeric, text, text) to authenticated;
+
+-- FR-16: Storage bucket for voice notes and message attachments
+-- This bucket stores audio recordings sent via the chat feature
+insert into storage.buckets (id, name, public)
+values ('message_attachments', 'message_attachments', true);
+
+-- Set up storage policy allowing authenticated users to upload voice notes
+create or replace storage policy "Allow authenticated uploads to message_attachments"
+on storage.objects for insert
+to authenticated
+with check (bucket_id = 'message_attachments');
+
+-- Allow public read access to voice note attachments
+create or replace storage policy "Allow public read from message_attachments"
+on storage.objects for select
+using (bucket_id = 'message_attachments');
+
+grant usage on storage schema to authenticated;
+grant all on storage.buckets to authenticated;
+grant all on storage.objects to authenticated;
+
 

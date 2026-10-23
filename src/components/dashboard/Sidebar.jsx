@@ -22,6 +22,7 @@ import {
   ShieldCheck,
   FileText,
   CreditCard,
+  Leaf,
 } from 'lucide-react';
 import logo from '../../assets/logo.png';
 
@@ -52,6 +53,7 @@ import logo from '../../assets/logo.png';
         { name: 'Reviews', href: '/dashboard/reviews', icon: Star },
         { name: 'Verification', href: '/dashboard/verification', icon: BadgeCheck },
         { name: 'Fleet', href: '/dashboard/fleet', icon: Truck },
+        { name: 'Emissions', href: '/dashboard/emissions', icon: Leaf },
         { name: 'Certificates', href: '/dashboard/certificates', icon: ShieldCheck },
       ],
     },
@@ -80,6 +82,7 @@ import logo from '../../assets/logo.png';
         { name: 'Notifications', href: '/dashboard/notifications', icon: Bell },
         { name: 'Cost Estimator', href: '/dashboard/cost-estimator', icon: Calculator },
         { name: 'Insurance', href: '/dashboard/insurance', icon: FileText },
+        { name: 'Emissions', href: '/dashboard/emissions', icon: Leaf },
         { name: 'Payouts', href: '/dashboard/payouts', icon: CreditCard },
         { name: 'Payments', href: '/dashboard/payments', icon: Wallet },
       ],

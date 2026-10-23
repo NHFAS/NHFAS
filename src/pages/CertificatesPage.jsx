@@ -1,6 +1,7 @@
-﻿import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
-import { ShieldCheck, FileText, GraduationCap, AlertCircle, CheckCircle2, LoaderCircle, ArrowLeft } from 'lucide-react';
+import { ShieldCheck, FileText, GraduationCap, AlertCircle, CheckCircle2, LoaderCircle, ArrowLeft, Pause, Play, SkipForward } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { Button } from '../components/Button';
 import { supabase } from '../lib/supabase';
 
@@ -14,6 +15,7 @@ const CertificatesPage = () => {
   const [loading, setLoading] = useState(true);
   const [issuing, setIssuing] = useState(false);
   const [enrolling, setEnrolling] = useState(false);
+  const [updating, setUpdating] = useState(false);
   const [error, setError] = useState('');
   const [flash, setFlash] = useState('');
   const [certType, setCertType] = useState('completion');
@@ -86,6 +88,19 @@ const CertificatesPage = () => {
     setEnrolling(false);
     setSkillName('');
     setMentorId('');
+    await load();
+  };
+
+  const updateEnrollmentStatus = async (enrollmentId, newStatus) => {
+    setUpdating(true);
+    setError('');
+    const { error: rpcError } = await supabase.rpc('update_apprenticeship_status', {
+      enrollment_id: enrollmentId,
+      new_status: newStatus,
+    });
+    if (rpcError) setError(rpcError.message);
+    else setFlash('Enrollment status updated.');
+    setUpdating(false);
     await load();
   };
 
@@ -190,12 +205,8 @@ const CertificatesPage = () => {
                       {cert.qr_payload && (
                         <div className="flex flex-col items-center gap-1">
                           <p className="text-xs text-slate-500">Verification QR</p>
-                          <div className="w-12 h-12 bg-white border border-slate-200 p-0.5 rounded">
-                            <img
-                              src={`data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="%23ffffff"/><path d="M20,20 h20 v20 H20 z M60,20 h20 v20 H60 z M20,60 h20 v20 H20 z M60,60 h20 v20 H60 z" fill="%23000000"/></svg>`}
-                              alt="QR code"
-                              className="block"
-                            />
+                          <div className="w-14 h-14 bg-white border border-slate-200 p-0.5 rounded">
+                            <QRCodeSVG value={cert.qr_payload} size={48} level="Q" />
                           </div>
                         </div>
                       )}
@@ -263,11 +274,53 @@ const CertificatesPage = () => {
                       <p className="text-sm font-semibold text-brand-navy">{enr.skill_name}</p>
                       <p className="text-xs text-slate-500">Mentor: {enr.mentor?.full_name || 'None'} · Started {new Intl.DateTimeFormat('en', { dateStyle: 'medium' }).format(new Date(enr.started_at))}</p>
                     </div>
-                    <span
-                      className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wide ${enr.status === 'active' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : enr.status === 'completed' ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-slate-200 bg-slate-100 text-slate-600'}`}
-                    >
-                      {enr.status}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wide ${enr.status === 'active' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : enr.status === 'completed' ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-slate-200 bg-slate-100 text-slate-600'}`}
+                      >
+                        {enr.status}
+                      </span>
+                      {enr.status === 'active' && (
+                        <>
+                          <button
+                            onClick={() => updateEnrollmentStatus(enr.id, 'completed')}
+                            disabled={updating}
+                            aria-label="Mark as completed"
+                            className="rounded-lg border border-slate-200 p-1 text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                          >
+                            <CheckCircle2 size={14} />
+                          </button>
+                          <button
+                            onClick={() => updateEnrollmentStatus(enr.id, 'paused')}
+                            disabled={updating}
+                            aria-label="Pause enrollment"
+                            className="rounded-lg border border-slate-200 p-1 text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                          >
+                            <Pause size={14} />
+                          </button>
+                        </>
+                      )}
+                      {enr.status === 'paused' && (
+                        <button
+                          onClick={() => updateEnrollmentStatus(enr.id, 'active')}
+                          disabled={updating}
+                          aria-label="Resume enrollment"
+                          className="rounded-lg border border-slate-200 p-1 text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                        >
+                          <Play size={14} />
+                        </button>
+                      )}
+                      {enr.status === 'completed' && (
+                        <button
+                          onClick={() => updateEnrollmentStatus(enr.id, 'active')}
+                          disabled={updating}
+                          aria-label="Reopen enrollment"
+                          className="rounded-lg border border-slate-200 p-1 text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                        >
+                          <SkipForward size={14} />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
