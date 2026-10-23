@@ -2485,23 +2485,30 @@ $$;
 grant execute on function public.request_financing(numeric, text, text) to authenticated;
 
 -- FR-16: Storage bucket for voice notes and message attachments
--- This bucket stores audio recordings sent via the chat feature
-insert into storage.buckets (id, name, public)
-values ('message_attachments', 'message_attachments', true);
+-- Run this once to create the bucket and policies
+-- Note: storage bucket creation and policy creation use separate SQL commands
 
--- Set up storage policy allowing authenticated users to upload voice notes
-create or replace storage policy "Allow authenticated uploads to message_attachments"
+-- Create the bucket (ON CONFLICT handles re-runs gracefully)
+insert into storage.buckets (id, name, public)
+values ('message_attachments', 'message_attachments', true)
+on conflict (id) do nothing;
+
+-- Storage policies for message attachments
+-- Drop existing policies first (idempotent on re-runs), then create
+drop policy if exists "Allow authenticated uploads to message_attachments" on storage.objects;
+create policy "Allow authenticated uploads to message_attachments"
 on storage.objects for insert
 to authenticated
 with check (bucket_id = 'message_attachments');
 
--- Allow public read access to voice note attachments
-create or replace storage policy "Allow public read from message_attachments"
-on storage.objects for select
-using (bucket_id = 'message_attachments');
+-- Note: message_attachments is a public bucket. Public buckets are
+-- accessible to anyone with the object URL, so a separate SELECT policy
+-- is not needed and can allow unintended object listing. If attachments
+-- should be private, make the bucket public=false and define read policies
+-- based on conversation membership instead.
 
-grant usage on storage schema to authenticated;
-grant all on storage.buckets to authenticated;
-grant all on storage.objects to authenticated;
+-- Do NOT use GRANT ALL ON storage.buckets/objects here;
+-- The policies above are the only access rules needed.
+-- Using broad GRANT statements can create security issues.
 
 

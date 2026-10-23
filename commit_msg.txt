@@ -1,0 +1,5 @@
+fix: storage bucket SQL syntax
+- Fix CREATE OR REPLACE POLICY to DROP + CREATE POLICY
+- Add ON CONFLICT for bucket re-runs
+- Remove public read policy (public buckets accessible via URL)
+- Remove GRANT ALL (policies are access control)
