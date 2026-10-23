@@ -1,4 +1,0 @@
-fix: attachment_type column removed from messages insert/read
-- Replace attachment_type: voice with audio_url: voiceUrl in insert
-- Replace message.attachment_type check with attachment_url check in read
-- All references to non-existent attachment_type column removed
