@@ -95,8 +95,7 @@ const JobChat = ({ jobId, user }) => {
       conversation_id: conversationId,
       sender_id: user.id,
       body: `[voice note: ${Math.round(duration)}s]`,
-      attachment_type: 'voice',
-      attachment_url: voiceUrl,
+      audio_url: voiceUrl,
     });
 
     if (msgError) {
@@ -128,7 +127,7 @@ const JobChat = ({ jobId, user }) => {
             )}
             {messages.map((message) => {
               const own = message.sender_id === user.id;
-              const isVoice = message.attachment_type === 'voice' && message.attachment_url;
+              const isVoice = message.attachment_url && message.attachment_url.includes('message_attachments');
               return (
                 <div key={message.id} className={`flex ${own ? 'justify-end' : 'justify-start'}`}>
                   <div className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${own ? 'bg-brand-green text-white' : 'bg-white border border-slate-200 text-slate-700'}`}>
