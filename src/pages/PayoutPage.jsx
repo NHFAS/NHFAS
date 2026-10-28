@@ -118,6 +118,7 @@ const [financingProvider, setFinancingProvider] = useState('');
     setRequesting(false);
     setPayoutAmount('');
     setSelectedAccountId('');
+    setInstantPayout(false);
     await load();
   };
 
@@ -293,6 +294,24 @@ const [financingProvider, setFinancingProvider] = useState('');
                     className={inputClass}
                   />
                 </label>
+                {payoutAmount && parseFloat(payoutAmount) > 0 && (
+                  <div className="col-span-full sm:col-span-2 flex items-end gap-2">
+                    <label className="inline-flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={instantPayout}
+                        onChange={(e) => setInstantPayout(e.target.checked)}
+                        className="rounded border-slate-300 text-brand-green focus:ring-brand-green"
+                      />
+                      <span className="text-sm font-medium text-slate-700">Instant payout (1.5% fee, min 20 ETB)</span>
+                    </label>
+                    {instantPayout && (
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Estimated fee: {new Intl.NumberFormat('en-ET', { style: 'currency', currency: 'ETB' }).format(Math.max(Math.round(parseFloat(payoutAmount) * 0.015 * 100) / 100, 20))}
+                      </p>
+                    )}
+                  </div>
+                )}
                 <div className="col-span-full sm:col-span-2 flex justify-end">
                   <Button
                     type="submit"

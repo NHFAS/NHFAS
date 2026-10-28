@@ -36,13 +36,17 @@ const CertificatesPage = () => {
       supabase.from('jobs').select('id, job_number, title, status').or(`client_id.eq.${user.id},provider_id.eq.${user.id}`).in('status', ['completed', 'confirmed', 'in_progress']).order('created_at', { ascending: false }),
       supabase.from('profiles').select('id, full_name, role').eq('role', 'provider').limit(20),
     ]);
-    setCertificates(certRows || []);
+    const certsWithHash = await Promise.all((certRows || []).map(async (cert) => ({
+      ...cert,
+      hash: await computeCertHash(cert),
+    })));
+    setCertificates(certsWithHash);
     setSkillCerts(skillRows || []);
     setEnrollments(enrollRows || []);
     setAvailableJobs(jobRows || []);
     setMentors(mentorRows || []);
     setLoading(false);
-  }, [user]);
+  }, [user, computeCertHash]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -66,6 +70,29 @@ const CertificatesPage = () => {
     setIssuing(false);
     setJobIdForCert('');
     await load();
+  };
+
+  // FR-27.1: compute SHA-256 hash of certificate metadata for blockchain anchoring.
+  const computeCertHash = async (cert) => {
+    const metadata = {
+      certificate_number: cert.certificate_number,
+      certificate_type: cert.certificate_type,
+      issued_at: cert.issued_at,
+      job_id: cert.job_id,
+      qr_payload: cert.qr_payload,
+      provenance: cert.provenance || {},
+    };
+    const encoder = new TextEncoder();
+    const data = encoder.encode(JSON.stringify(metadata));
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+  };
+
+  // FR-27.1: placeholder — blockchain platform selection is pending (SRS open issue).
+  // When a provider selects a ledger, this will POST the cert hash to the anchor endpoint.
+  const anchorToBlockchain = async (cert) => {
+    setFlash(`Certificate ${cert.certificate_number} hash ready for anchoring: ${cert.hash}. Blockchain integration pending platform selection.`);
   };
 
   const enrollApprenticeship = async () => {
@@ -195,10 +222,19 @@ const CertificatesPage = () => {
                     <div>
                       <p className="text-sm font-semibold text-brand-navy">{cert.certificate_type} certificate</p>
                       <p className="text-xs text-slate-500">Certificate #{cert.certificate_number}</p>
+                      <p className="text-xs text-slate-400 font-mono break-all">Hash: {cert.hash}</p>
                       {cert.blockchain_anchor && (
                         <p className="text-xs text-emerald-600 flex items-center gap-1">
                           <span className="text-[10px]">⛓</span> Blockchain anchored
                         </p>
+                      )}
+                      {!cert.blockchain_anchor && cert.hash && (
+                        <button
+                          onClick={() => anchorToBlockchain(cert)}
+                          className="text-xs text-brand-green underline hover:text-brand-dark"
+                        >
+                          Anchor to blockchain
+                        </button>
                       )}
                     </div>
                     <div className="flex items-center gap-3">
