@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, ArrowLeft, Flag, Gavel, LoaderCircle, Radio, Timer, User } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Bell, Flag, Gavel, LoaderCircle, Radio, Timer, User } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { Button } from '../components/Button';
 import { supabase } from '../lib/supabase';
@@ -27,7 +27,10 @@ const AuctionPage = () => {
   const [userId, setUserId] = useState(null);
   const [live, setLive] = useState(false);
   const [extendedNote, setExtendedNote] = useState('');
+  const [outbidNotification, setOutbidNotification] = useState(false);
+  const [reserveNotMet, setReserveNotMet] = useState(false);
   const prevEndsAtRef = useRef(null);
+  const prevWinningRef = useRef(false);
 
   const load = useCallback(async () => {
     if (!auctionId) return;
@@ -60,6 +63,14 @@ const AuctionPage = () => {
     const winning = liveRows.find((row) => row.status === 'winning');
     if (winning) setCurrentPrice(Number(winning.amount));
     setTimeLeft(Math.max(0, Math.floor((new Date(a.ends_at).getTime() - Date.now()) / 1000)));
+    // Reserve price enforcement: track whether reserve has been met
+    setReserveNotMet(Boolean(a.reserve_price) && currentPrice < Number(a.reserve_price));
+    // Outbid notification: if user had a winning bid but now it's outbid
+    const userWinningNow = liveRows.some((row) => row.status === 'winning' && row.bidder_id === userId);
+    const userOutbidNow = liveRows.some((row) => row.status === 'outbid' && row.bidder_id === userId);
+    if (userId && prevWinningRef.current && !userWinningNow && userOutbidNow) {
+      setOutbidNotification(true);
+    }
     setIsLoading(false);
   }, [auctionId]);
 
@@ -124,6 +135,7 @@ const AuctionPage = () => {
   );
   const iAmWinning = myHighestBid?.status === 'winning';
   const iAmOutbid = Boolean(myHighestBid) && myHighestBid.status === 'outbid';
+  prevWinningRef.current = iAmWinning;
   const isSeller = auction?.seller_id === userId;
   const reserveMet = auction?.reserve_price == null || currentPrice >= Number(auction.reserve_price);
 
@@ -140,10 +152,9 @@ const AuctionPage = () => {
   const sellerCanClose = isSeller && auction.status === 'open';
 
   const closeAuctionEarly = async () => {
-    if (!window.confirm('Close this auction now? The current winning bidder will be notified and wins the item.')) return;
+    if (reserveNotMet && !window.confirm(`WARNING: The reserve price has not been met. Closing now will not award the item to any bidder. Proceed anyway?`)) return;
     setWorking(true);
     setError('');
-    // Closing is admin-gated in the RPC; sellers get a clear error otherwise.
     const { error: closeError } = await supabase.rpc('close_auction', { target_auction_id: auctionId });
     setWorking(false);
     if (closeError) {
@@ -213,12 +224,18 @@ const AuctionPage = () => {
               </div>
             </dl>
 
+            {outbidNotification && (
+              <p role="alert" className="mt-4 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-medium text-amber-800">
+                <Bell className="h-4 w-4 shrink-0" aria-hidden="true" />
+                You have been outbid by another bidder. Place a new bid to stay competitive.
+              </p>
+            )}
             {iAmWinning && (
               <p role="status" className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800">
                 You are the highest bidder at {Number(myHighestBid.amount).toLocaleString()} ETB.
               </p>
             )}
-            {iAmOutbid && (
+            {iAmOutbid && !outbidNotification && (
               <p role="alert" className="mt-4 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-medium text-amber-800">
                 <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
                 You have been outbid. Your highest bid was {Number(myHighestBid.amount).toLocaleString()} ETB.
@@ -268,6 +285,9 @@ const AuctionPage = () => {
             {isSeller && (
               <div className="mt-5 border-t border-slate-100 pt-4">
                 <h4 className="text-xs font-bold uppercase tracking-wide text-slate-400">Seller actions</h4>
+                {reserveNotMet && sellerCanClose && (
+                  <p className="mt-2 text-xs text-amber-700 font-medium">⚠ Reserve price not yet met — closing will not award the item.</p>
+                )}
                 {sellerCanClose ? (
                   <Button variant="outline" onClick={closeAuctionEarly} disabled={working} className="mt-2 w-full border-red-300 text-red-700 hover:bg-red-50">
                     Request early close

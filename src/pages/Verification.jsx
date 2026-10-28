@@ -183,7 +183,7 @@ const Verification = () => {
   const licenseRecord = records.find((record) => record.verification_type === 'license');
 
   return (
-    <div className="mx-auto flex min-h-full max-w-5xl flex-col gap-7 pb-8">
+    <div className="mx-auto flex min-h-full max-w-5xl flex-col gap-7 pb-8 overflow-y-auto max-h-[calc(100vh-4rem)]">
       <header>
         <p className="text-sm font-semibold uppercase tracking-[0.16em] text-brand-green">Provider workspace</p>
         <h1 className="mt-2 flex items-center gap-3 text-3xl font-extrabold text-brand-navy">

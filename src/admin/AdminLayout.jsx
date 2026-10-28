@@ -18,6 +18,7 @@ import {
   Users,
   Wallet,
   X,
+  TrendingUp,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -47,6 +48,7 @@ export const adminMenu = [
       { label: 'Finance', href: `${ADMIN_BASE}/finance`, icon: Landmark },
       { label: 'Auctions', href: `${ADMIN_BASE}/auctions`, icon: Gavel },
       { label: 'Insurance', href: `${ADMIN_BASE}/insurance`, icon: Umbrella },
+      { label: 'Pricing', href: `${ADMIN_BASE}/pricing`, icon: TrendingUp },
     ],
   },
   {
@@ -55,7 +57,6 @@ export const adminMenu = [
       { label: 'Disputes', href: `${ADMIN_BASE}/disputes`, icon: Scale },
       { label: 'Credentials', href: `${ADMIN_BASE}/credentials`, icon: Award },
       { label: 'Verification queue', href: `${ADMIN_BASE}/verifications`, icon: ShieldCheck },
-  { label: 'Security (2FA)', href: `${ADMIN_BASE}/security`, icon: Lock },
     ],
   },
 ];

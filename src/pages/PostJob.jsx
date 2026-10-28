@@ -21,7 +21,7 @@ const PostJob = () => {
   const [form, setForm] = useState({
     title: '', description: '', category_id: '', service_address: '', pickup_address: '', dropoff_address: '',
     agreed_price: '', scheduled_start: '', cargo_description: '', weight_kg: '', length_m: '', width_m: '',
-    height_m: '', is_hazardous: false, is_oversize: false,
+    height_m: '', is_hazardous: false, is_oversize: false, want_insurance: false, insurance_coverage: '',
   });
   const [selectedClassId, setSelectedClassId] = useState('');
   const [oversizeAck, setOversizeAck] = useState(false);
@@ -116,6 +116,9 @@ const PostJob = () => {
         if (form.is_hazardous && !hazmatAck) {
           throw new Error('Acknowledge the hazardous-materials permit requirement before posting this load.');
         }
+        if (form.want_insurance && !form.insurance_coverage) {
+          throw new Error('Enter the cargo coverage amount for insurance.');
+        }
       }
       const { data: job, error: jobError } = await supabase.from('jobs').insert({
         client_id: user.id,
@@ -151,6 +154,20 @@ const PostJob = () => {
           is_oversize: form.is_oversize,
         });
         if (cargoError) throw new Error(cargoError.message);
+      }
+
+      // FR-17: Create insurance policy request if opted in
+      if (kind === 'haulage' && form.want_insurance && form.insurance_coverage) {
+        const { error: insuranceError } = await supabase.rpc('request_job_insurance', {
+          target_job_id: job.id,
+          coverage_amount: Number(form.insurance_coverage),
+        });
+        if (insuranceError) {
+          setError('Job posted, but insurance request failed: ' + insuranceError.message);
+          setIsSubmitting(false);
+          navigate(`/dashboard/jobs/${job.id}`);
+          return;
+        }
       }
 
       // FR-19: record how the fair-price band was framed for this job.
@@ -404,6 +421,20 @@ const PostJob = () => {
                   <input type="checkbox" checked={hazmatAck} onChange={(event) => setHazmatAck(event.target.checked)}
                     className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-green focus:ring-brand-green" />
                   <span>I understand hazardous materials require a specialized permit and approved handling before dispatch (FR-22 compliance gate).</span>
+                </label>
+              )}
+              <label className="mt-4 flex items-start gap-2 text-sm text-slate-700">
+                <input type="checkbox" checked={form.want_insurance} onChange={setChecked('want_insurance')}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-green focus:ring-brand-green" />
+                <span>Add cargo insurance for lost, stolen, or damaged goods in transit (FR-17)</span>
+              </label>
+              {form.want_insurance && (
+                <label className="block space-y-1 text-sm font-medium text-slate-700 mt-2">
+                  Coverage amount (ETB)
+                  <input type="number" min="100" step="1" value={form.insurance_coverage}
+                    onChange={(e) => setForm((c) => ({ ...c, insurance_coverage: e.target.value }))}
+                    placeholder="e.g. 50000" className={inputClass} />
+                  <p className="text-[11px] text-slate-500">Premium is approximately 3% of coverage amount.</p>
                 </label>
               )}
             </div>

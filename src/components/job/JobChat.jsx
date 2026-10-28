@@ -1,9 +1,12 @@
 ﻿import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { LoaderCircle, MessageSquareText, Send, Mic, X } from 'lucide-react';
+import { LoaderCircle, MessageSquareText, Send, Mic, X, Speaker, VolumeX } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import VoiceNoteRecorder from '../voice/VoiceNoteRecorder';
+import TextToSpeech from '../voice/TextToSpeech';
+import { useTranslation } from '../../i18n/I18nContext';
 
 const JobChat = ({ jobId, user }) => {
+  const { t, lang } = useTranslation();
   const [conversationId, setConversationId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState('');
@@ -137,7 +140,10 @@ const JobChat = ({ jobId, user }) => {
                         <audio controls src={message.audio_url} className="h-6 w-full" preload="none" />
                       </div>
                     ) : (
-                      <p className="whitespace-pre-wrap">{message.body}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="whitespace-pre-wrap flex-1">{message.body}</p>
+                        <TextToSpeech text={message.body} lang={lang} className="self-start" />
+                      </div>
                     )}
                     <p className={`mt-1 text-[10px] ${own ? 'text-white/70' : 'text-slate-400'}`}>
                       {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}

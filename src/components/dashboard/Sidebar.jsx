@@ -23,6 +23,7 @@ import {
   FileText,
   CreditCard,
   Leaf,
+  Gavel,
 } from 'lucide-react';
 import logo from '../../assets/logo.png';
 
@@ -50,6 +51,8 @@ import logo from '../../assets/logo.png';
       items: [
         { name: 'Services', href: '/dashboard/services', icon: Briefcase },
         { name: 'Earnings', href: '/dashboard/earnings', icon: DollarSign },
+        { name: 'Payouts', href: '/dashboard/payouts', icon: CreditCard },
+        { name: 'Auctions', href: '/dashboard/auctions', icon: Gavel },
         { name: 'Reviews', href: '/dashboard/reviews', icon: Star },
         { name: 'Verification', href: '/dashboard/verification', icon: BadgeCheck },
         { name: 'Fleet', href: '/dashboard/fleet', icon: Truck },
@@ -72,6 +75,7 @@ import logo from '../../assets/logo.png';
       items: [
         { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
         { name: 'Post a Job', href: '/dashboard/post-job', icon: PlusCircle },
+        { name: 'Bid on Auctions', href: '/dashboard/auctions', icon: Gavel },
         { name: 'My Bookings', href: '/dashboard/bookings', icon: Calendar },
         { name: 'Browse Services', href: '/dashboard/marketplace', icon: Wrench },
       ],
@@ -83,7 +87,6 @@ import logo from '../../assets/logo.png';
         { name: 'Cost Estimator', href: '/dashboard/cost-estimator', icon: Calculator },
         { name: 'Insurance', href: '/dashboard/insurance', icon: FileText },
         { name: 'Emissions', href: '/dashboard/emissions', icon: Leaf },
-        { name: 'Payouts', href: '/dashboard/payouts', icon: CreditCard },
         { name: 'Payments', href: '/dashboard/payments', icon: Wallet },
       ],
     },

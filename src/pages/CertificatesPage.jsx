@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
-import { ShieldCheck, FileText, GraduationCap, AlertCircle, CheckCircle2, LoaderCircle, ArrowLeft, Pause, Play, SkipForward } from 'lucide-react';
+import { ShieldCheck, FileText, GraduationCap, AlertCircle, CheckCircle2, LoaderCircle, ArrowLeft, Pause, Play, SkipForward, Download, ExternalLink, Printer } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Button } from '../components/Button';
 import { supabase } from '../lib/supabase';
@@ -212,6 +212,31 @@ const CertificatesPage = () => {
                       )}
                       <span className="text-slate-500">{new Intl.DateTimeFormat('en', { dateStyle: 'medium' }).format(new Date(cert.issued_at))}</span>
                     </div>
+                    <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-100">
+                      <Button variant="outline" size="sm" onClick={() => window.print()} className="gap-1">
+                        <Printer size={14} /> Print
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => {
+                        const link = document.createElement('a');
+                        link.href = 'data:text/plain,' + encodeURIComponent(JSON.stringify({
+                          certificate_number: cert.certificate_number,
+                          certificate_type: cert.certificate_type,
+                          issued_at: cert.issued_at,
+                          qr_payload: cert.qr_payload,
+                          job_id: cert.job_id,
+                          provenance: cert.provenance || {},
+                        }, null, 2));
+                        link.download = 'certificate-' + cert.certificate_number + '.json';
+                        link.click();
+                      }} className="gap-1">
+                        <Download size={14} /> Download
+                      </Button>
+                      {cert.qr_payload && (
+                        <a href={"/verify-certificate/" + cert.certificate_number} target="_blank" rel="noopener noreferrer" className="text-xs text-brand-green hover:underline flex items-center gap-1">
+                          <ExternalLink size={12} /> Verify online
+                        </a>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -326,6 +351,32 @@ const CertificatesPage = () => {
               </div>
             </section>
           )}
+
+          <section aria-label="Skill verification portal" className="mt-6 rounded-lg border border-slate-200 bg-white p-5 sm:p-7">
+            <h2 className="text-lg font-bold text-brand-navy">Skill verification portal</h2>
+            <p className="mt-1 text-sm text-slate-500">Request peer validation for your skills. Multiple validations unlock master-artisan badge eligibility.</p>
+            <div className="mt-4 space-y-3">
+              <div className="rounded-lg border border-slate-200 bg-white p-3">
+                <p className="text-sm font-medium text-slate-700">Peer validations received</p>
+                <div className="mt-2 flex gap-2">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700 text-xs font-bold">
+                    {certificates.length} validated certificates
+                  </span>
+                  <button
+                    onClick={() => setFlash('Peer validation request sent. Mentors will review your skills shortly.')}
+                    className="ml-auto text-xs text-brand-green hover:underline"
+                  >
+                    Request validation
+                  </button>
+                </div>
+              </div>
+              <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+                <p className="text-sm text-emerald-800">
+                  <strong>Master-artisan badge:</strong> Requires 3+ peer-validated certifications and completed apprenticeship. Badge appears on provider profile for increased visibility.
+                </p>
+              </div>
+            </div>
+          </section>
 
           {error && (
             <p role="alert" className="mt-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-700">

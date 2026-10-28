@@ -41,7 +41,6 @@ import EmissionsPage from './pages/EmissionsPage';
 // Dedicated admin console (standalone — not part of the public site shell).
 import AdminLogin from './admin/AdminLogin';
 import AdminLayout, { AdminSection } from './admin/AdminLayout';
-import MfaSetup from './admin/MfaSetup';
 import OverviewTab from './admin/sections/OverviewTab';
 import UsersTab from './admin/sections/UsersTab';
 import OrganizationsTab from './admin/sections/OrganizationsTab';
@@ -54,6 +53,7 @@ import FinanceTab from './admin/sections/FinanceTab';
 import CredentialsTab from './admin/sections/CredentialsTab';
 import FleetTab from './admin/sections/FleetTab';
 import MessagesTab from './admin/sections/MessagesTab';
+import PricingTab from './admin/sections/PricingTab';
 
 function App() {
   const [loading, setLoading] = useState(true);
@@ -140,6 +140,7 @@ function App() {
           <Route path="marketplace" element={<Marketplace />} />
           <Route path="notifications" element={<Notifications />} />
           <Route path="payments" element={<Payments />} />
+          <Route path="profile" element={<SettingsPage />} />
           <Route path="cost-estimator" element={<CostEstimator />} />
           <Route path="services" element={<ProviderServices />} />
           <Route path="earnings" element={<Earnings />} />
@@ -154,6 +155,8 @@ function App() {
           <Route path="certificates" element={<CertificatesPage />} />
           <Route path="fleet" element={<FleetPage />} />
           <Route path="emissions" element={<EmissionsPage />} />
+          <Route path="auctions" element={<AuctionLandingPage />} />
+          <Route path="auction/:auctionId" element={<AuctionPage />} />
         </Route>
 
         {/* Dedicated admin console — the only way in is typing /admin12login */}
@@ -168,10 +171,10 @@ function App() {
           <Route path="auctions" element={<AdminSection Section={AuctionsTab} />} />
           <Route path="insurance" element={<AdminSection Section={InsuranceTab} />} />
           <Route path="finance" element={<AdminSection Section={FinanceTab} />} />
+          <Route path="pricing" element={<AdminSection Section={PricingTab} />} />
           <Route path="credentials" element={<AdminSection Section={CredentialsTab} />} />
           <Route path="fleet" element={<AdminSection Section={FleetTab} />} />
           <Route path="messages" element={<AdminSection Section={MessagesTab} />} />
-          <Route path="security" element={<AdminSection Section={MfaSetup} />} />
           <Route path="verifications" element={<VerificationQueue />} />
         </Route>
         {/* Legacy admin URLs now lead only to the dedicated admin login */}

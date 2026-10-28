@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ArrowRight, CheckCircle2, FileText, LoaderCircle, Upload } from 'lucide-react';
+import { ArrowRight, Bell, CheckCircle2, FileText, LoaderCircle, Signature, Upload } from 'lucide-react';
 import { Link, useOutletContext } from 'react-router-dom';
 import { Button } from '../Button';
 import { supabase } from '../../lib/supabase';
@@ -14,6 +14,12 @@ const statusMeta = {
 
 const inputClass = 'block w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-brand-green focus:outline-none focus:ring-2 focus:ring-brand-green/20';
 
+const DEFAULT_MILESTONE_STAGES = [
+  { title: 'Material Sourcing', description: 'Source and procure raw materials for the custom build', sequence: 1 },
+  { title: 'Structural Build', description: 'Complete structural construction and assembly', sequence: 2 },
+  { title: 'Final Delivery', description: 'Final delivery and handover of completed build', sequence: 3 },
+];
+
 const JobMilestones = ({ job, user }) => {
   const [milestones, setMilestones] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -24,6 +30,7 @@ const JobMilestones = ({ job, user }) => {
   const [newAmount, setNewAmount] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [proofFile, setProofFile] = useState(null);
+  const [signoffSignature, setSignoffSignature] = useState('');
 
   const isClient = job.client_id === user.id;
   const isProvider = job.provider_id === user.id;
@@ -54,6 +61,47 @@ const JobMilestones = ({ job, user }) => {
     loadEscrow();
     return () => { isCurrent = false; };
   }, [job]);
+  const createDefaultStages = async () => {
+    if (milestones.length > 0) {
+      setError('Milestones already exist for this job.');
+      return;
+    }
+    setWorking('create');
+    setError('');
+    const { data: escrowRows } = await supabase
+      .from('escrow_accounts')
+      .select('id')
+      .eq('job_id', job.id)
+      .maybeSingle();
+    if (!escrowRows) {
+      setError('No escrow account found for this job. Fund escrow first.');
+      setWorking(null);
+      return;
+    }
+    for (const stage of DEFAULT_MILESTONE_STAGES) {
+      const { error: createError } = await supabase.rpc('create_escrow_milestone', {
+        target_escrow_id: escrowRows.id,
+        milestone_title: stage.title,
+        milestone_description: stage.description,
+        milestone_amount: 0,
+        milestone_sequence: stage.sequence,
+      });
+      if (createError) {
+        setError(createError.message);
+        setWorking(null);
+        return;
+      }
+    }
+    setFlash('Default milestone stages created (Material Sourcing, Structural Build, Final Delivery).');
+    setWorking(null);
+    const { data: msRows } = await supabase
+      .from('escrow_milestones')
+      .select('*')
+      .eq('escrow_id', escrowRows.id)
+      .order('sequence_number', { ascending: true });
+    setMilestones(msRows || []);
+  };
+
   const createMilestone = async () => {
     if (!newTitle.trim() || !newAmount) {
       setError('Title and amount are required.');
@@ -171,12 +219,16 @@ const JobMilestones = ({ job, user }) => {
   };
 
   const releaseMilestone = async (milestone) => {
-    if (!window.confirm('Release payment for this milestone? This cannot be undone.')) return;
+    if (!signoffSignature.trim()) {
+      setError('Please provide your digital signature to confirm milestone sign-off.');
+      return;
+    }
     setWorking(milestone.id);
     setError('');
     setFlash('');
     const { error: releaseError } = await supabase.rpc('release_milestone_payment', {
       target_milestone_id: milestone.id,
+      client_signature: signoffSignature,
     });
     if (releaseError) setError(releaseError.message);
     else setFlash('Milestone payment released to provider.');
@@ -237,7 +289,18 @@ const JobMilestones = ({ job, user }) => {
       )}
             <div className="space-y-3">
         {milestones.length === 0 ? (
-          <p className="text-sm text-slate-500">No milestones yet. {isClient ? 'Create your first milestone above.' : 'Waiting for client to create milestones.'}</p>
+          <div className="text-center py-8">
+            <p className="text-sm text-slate-500 mb-4">No milestones yet.</p>
+            {isClient && (
+              <div className="flex flex-col gap-3">
+                <Button onClick={createDefaultStages} disabled={working === 'create'} className="w-full sm:w-auto gap-2">
+                  {working === 'create' ? <LoaderCircle size={16} className="animate-spin" /> : <Bell size={16} />}
+                  Create default milestone stages
+                </Button>
+                <p className="text-[11px] text-slate-400">Material Sourcing → Structural Build → Final Delivery</p>
+              </div>
+            )}
+          </div>
         ) : (
           <ul className="divide-y divide-slate-100">
             {milestones.map((m) => (
@@ -277,9 +340,13 @@ const JobMilestones = ({ job, user }) => {
                 )}
 
                 {m.status === 'approved' && isClient && (
-                  <div className="mt-3 flex items-center gap-2">
-                    <Button onClick={() => releaseMilestone(m)} disabled={working === m.id} className="gap-2">
-                      {working === m.id ? <LoaderCircle size={16} className="animate-spin" /> : <Upload size={16} />}
+                  <div className="mt-3 space-y-2">
+                    <label className="block text-sm font-medium text-slate-700">Client digital signature (required for sign-off)</label>
+                    <textarea value={signoffSignature} onChange={(e) => setSignoffSignature(e.target.value)}
+                      placeholder="Type your full name as digital signature"
+                      rows={2} className={inputClass} />
+                    <Button onClick={() => releaseMilestone(m)} disabled={working === m.id || !signoffSignature.trim()} className="gap-2">
+                      {working === m.id ? <LoaderCircle size={16} className="animate-spin" /> : <Signature size={16} />}
                       Release Payment
                     </Button>
                   </div>

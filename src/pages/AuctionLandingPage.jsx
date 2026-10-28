@@ -17,8 +17,22 @@ import { supabase } from '../lib/supabase';
 const AuctionCard = ({ auction, currentPrice, timeLeft, userBid }) => {
   const isOpen = auction.status === 'open' && timeLeft > 0;
   const isUserWinning = userBid === true;
+  const isVideo = auction.media_url?.match(/\.(mp4|webm|mov|avi)$/i) ||
+    auction.media_url?.includes('youtube.com') ||
+    auction.media_url?.includes('youtu.be');
   return (
-    <article className="rounded-xl border border-slate-200 bg-white p-5 hover:shadow-md transition-shadow">
+    <article className="rounded-xl border border-slate-200 bg-white p-5 hover:shadow-md transition-shadow flex flex-col">
+      {auction.media_url && (
+        <Link to={`/auction/${auction.id}`} className="mb-3 block aspect-video overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+          {isVideo ? (
+            <div className="h-full w-full flex items-center justify-center bg-black text-slate-400 text-sm">
+              🎬 Video item — click to watch
+            </div>
+          ) : (
+            <img src={auction.media_url} alt={auction.title} className="h-full w-full object-cover" />
+          )}
+        </Link>
+      )}
       <div className="flex justify-between items-start mb-2">
         <Link
           to={`/auction/${auction.id}`}
@@ -81,7 +95,7 @@ const AuctionLandingPage = () => {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
   const [createForm, setCreateForm] = useState({
-    title: '', description: '', starting_price: '', reserve_price: '', duration_hours: '24',
+    title: '', description: '', starting_price: '', reserve_price: '', duration_hours: '24', media_url: '',
   });
   const navigate = useNavigate();
 
@@ -172,6 +186,7 @@ const AuctionLandingPage = () => {
         seller_id: userData.user.id,
         title: createForm.title.trim(),
         description: createForm.description.trim() || null,
+        media_url: createForm.media_url.trim() || null,
         starting_price: starting,
         reserve_price: reserve,
         starts_at: startsAt.toISOString(),
@@ -230,6 +245,13 @@ const AuctionLandingPage = () => {
                 <input type="text" maxLength={120} required value={createForm.title} onChange={setCreate('title')}
                   placeholder="Handmade mahogany dining table"
                   className="block w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-brand-green focus:outline-none focus:ring-2 focus:ring-brand-green/20" />
+              </label>
+              <label className="block space-y-1.5 text-sm font-medium text-slate-700 sm:col-span-2">
+                Image or video URL *
+                <input type="url" required value={createForm.media_url} onChange={setCreate('media_url')}
+                  placeholder="https://example.com/item.jpg or https://youtube.com/watch?v=..."
+                  className="block w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-brand-green focus:outline-none focus:ring-2 focus:ring-brand-green/20" />
+                <p className="text-[11px] text-slate-500 mt-1">Paste a link to your item image or video. Buyers click it to view full size.</p>
               </label>
               <label className="block space-y-1.5 text-sm font-medium text-slate-700 sm:col-span-2">
                 Description
