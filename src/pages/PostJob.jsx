@@ -37,7 +37,7 @@ const PostJob = () => {
       setCategoriesError('');
       const [{ data: cats, error: categoriesQueryError }, { data: classes, error: vehicleClassesError }] = await Promise.all([
         supabase.from('service_categories').select('id, name, category_type').eq('is_active', true).order('name'),
-        supabase.from('vehicle_classes').select('id, code, name, rated_payload_kg').order('rated_payload_kg'),
+        supabase.from('vehicle_classes').select('id, code, name, rated_payload_kg, max_gvw_kg, axle_count').order('rated_payload_kg'),
       ]);
       if (!isCurrent) return;
       setCategories(cats || []);
@@ -67,6 +67,12 @@ const PostJob = () => {
   // than 3.05 m is an oversize load and needs the permit pathway (FR-03).
   const exceedsStandardEnvelope = (lengthM != null && lengthM > 13.6) || (widthM != null && widthM > 3.05);
   const payloadExceeded = Boolean(selectedClass && weight && weight > selectedClass.rated_payload_kg);
+  // FR-22.1: axle-load compliance — cargo weight must not exceed per-axle load capacity.
+  // Conservative model: per-axle limit = max_gvw_kg / axle_count, with 5% safety margin.
+  const axleLoadExceeded = Boolean(
+    selectedClass && weight && selectedClass.max_gvw_kg && selectedClass.axle_count
+      && weight > Math.round((selectedClass.max_gvw_kg / selectedClass.axle_count) * 0.95)
+  );
 
   // FR-19 fair-price reference for the chosen category (async, best-effort).
   useEffect(() => {
@@ -106,6 +112,9 @@ const PostJob = () => {
         }
         if (payloadExceeded) {
           throw new Error(`${selectedClass.name} is rated for ${selectedClass.rated_payload_kg.toLocaleString()} kg, below your ${weight.toLocaleString()} kg cargo. Choose a heavier class.`);
+        }
+        if (axleLoadExceeded) {
+          throw new Error(`${selectedClass.name} axle-load limit exceeded: per-axle capacity is approximately ${Math.round((selectedClass.max_gvw_kg / selectedClass.axle_count) * 0.95).toLocaleString()} kg for your ${weight.toLocaleString()} kg cargo. Reduce cargo weight or choose a heavier vehicle class.`);
         }
         if (exceedsStandardEnvelope && !form.is_oversize) {
           throw new Error('The cargo dimensions exceed the standard trailer envelope (13.6 m long / 3.05 m wide). Tick "Oversize load" so compliance can issue the permit.');
@@ -402,6 +411,11 @@ const PostJob = () => {
               {payloadExceeded && (
                 <p role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-700">
                   {selectedClass.name} is rated for {selectedClass.rated_payload_kg.toLocaleString()} kg — your {weight.toLocaleString()} kg cargo exceeds it. Choose a heavier class to continue.
+                </p>
+              )}
+              {axleLoadExceeded && (
+                <p role="alert" className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-medium text-amber-900">
+                  {selectedClass.name} axle-load limit: per-axle capacity is approximately {Math.round((selectedClass.max_gvw_kg / selectedClass.axle_count) * 0.95).toLocaleString()} kg. Your {weight.toLocaleString()} kg cargo may exceed safe per-axle limits. Reduce weight or choose a heavier class before dispatch (FR-22).
                 </p>
               )}
               {weight > 0 && !suggestedClass && (

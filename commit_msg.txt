@@ -1,3 +1,0 @@
-fix: voice note duration display
-- Ensure minimum duration of 1s even if recording is very short
-- Math.max(1, Math.round(duration)) prevents showing [voice note: 0s]

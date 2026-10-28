@@ -27,6 +27,7 @@ const PayoutPage = () => {
   const [accountReference, setAccountReference] = useState('');
   const [selectedAccountId, setSelectedAccountId] = useState('');
   const [payoutAmount, setPayoutAmount] = useState('');
+  const [instantPayout, setInstantPayout] = useState(false);
 const [financingRequests, setFinancingRequests] = useState([]);
 const [requestingFinancing, setRequestingFinancing] = useState(false);
 const [financingAmount, setFinancingAmount] = useState('');
@@ -95,18 +96,25 @@ const [financingProvider, setFinancingProvider] = useState('');
       setError('Enter a valid amount.');
       return;
     }
+    // FR-23.1: instant payout fee — 1.5% of amount, minimum 20 ETB.
+    const fee = instantPayout ? Math.max(Math.round(amount * 0.015 * 100) / 100, 20) : 0;
     setRequesting(true);
     setError('');
     const { data, error: rpcError } = await supabase.rpc('request_payout', {
       target_account_id: selectedAccountId,
       amount,
+      instant_payout: instantPayout,
+      fee,
     });
     if (rpcError) {
       setError(rpcError.message);
       setRequesting(false);
       return;
     }
-    setFlash(`Payout of ${new Intl.NumberFormat('en-ET', { style: 'currency', currency: 'ETB' }).format(amount)} requested.`);
+    const totalLabel = instantPayout
+      ? `Payout of ${new Intl.NumberFormat('en-ET', { style: 'currency', currency: 'ETB' }).format(amount)} + instant fee ${new Intl.NumberFormat('en-ET', { style: 'currency', currency: 'ETB' }).format(fee)} requested.`
+      : `Payout of ${new Intl.NumberFormat('en-ET', { style: 'currency', currency: 'ETB' }).format(amount)} requested.`;
+    setFlash(totalLabel);
     setRequesting(false);
     setPayoutAmount('');
     setSelectedAccountId('');

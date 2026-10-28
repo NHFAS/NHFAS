@@ -574,6 +574,8 @@ create table if not exists public.payouts (
   amount numeric(14,2) not null check (amount > 0),
   currency char(3) not null default 'ETB',
   status text not null default 'pending' check (status in ('pending', 'processing', 'paid', 'failed', 'cancelled')),
+  instant_payout boolean not null default false,
+  payout_fee numeric(14,2) not null default 0,
   provider_reference text unique,
   created_at timestamptz not null default now()
 );
@@ -2167,7 +2169,9 @@ grant execute on function public.accept_job_quote(uuid) to authenticated;
 -- rows later); providers request withdrawals through this definer RPC.
 create or replace function public.request_payout(
   target_account_id uuid,
-  amount numeric
+  amount numeric,
+  instant_payout boolean default false,
+  fee numeric default 0
 ) returns public.payouts
 language plpgsql security definer set search_path = public
 as $$
@@ -2177,6 +2181,7 @@ declare
   pending_total numeric;
   available numeric;
   result public.payouts;
+  total_with_fee numeric;
 begin
   if amount is null or amount <= 0 then raise exception 'Enter an amount greater than zero'; end if;
 
@@ -2192,18 +2197,19 @@ begin
   from public.payouts where payee_id = auth.uid() and status in ('pending', 'processing');
   available := released_total - pending_total;
 
-  if amount > available then
-    raise exception 'Requested amount (%) exceeds available balance (%)', amount, available;
+  total_with_fee := amount + coalesce(fee, 0);
+  if total_with_fee > available then
+    raise exception 'Requested amount + fee (%) exceeds available balance (%)', total_with_fee, available;
   end if;
 
-  insert into public.payouts (payee_id, payout_account_id, amount, status)
-  values (auth.uid(), target_account_id, amount, 'pending')
+  insert into public.payouts (payee_id, payout_account_id, amount, instant_payout, payout_fee, status)
+  values (auth.uid(), target_account_id, amount, instant_payout, coalesce(fee, 0), 'pending')
   returning * into result;
 
   return result;
 end;
 $$;
-grant execute on function public.request_payout(uuid, numeric) to authenticated;
+grant execute on function public.request_payout(uuid, numeric, boolean, numeric) to authenticated;
 
 
 -- FR-15: digital_certificates is SELECT-only for the owner/admin, so a
