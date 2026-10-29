@@ -8,7 +8,6 @@ import {
   DollarSign, 
   Star, 
   Settings,
-  Repeat,
   MapPin,
   Wrench,
   BadgeCheck,
@@ -27,7 +26,7 @@ import {
 } from 'lucide-react';
 import logo from '../../assets/logo.png';
 
-  const Sidebar = ({ fullName, isClientMode, onToggleMode, role, open, onClose }) => {
+  const Sidebar = ({ fullName, isClientMode, role, open, onClose }) => {
   const location = useLocation();
 
   // Any navigation closes the mobile drawer.
@@ -170,19 +169,6 @@ import logo from '../../assets/logo.png';
           </div>
         ))}
       </nav>
-
-      <div className="p-4 border-t border-slate-200">
-        <button 
-          onClick={onToggleMode}
-          className="flex items-center gap-2 w-full px-4 py-2.5 rounded-lg border border-slate-200 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors group"
-        >
-          <Repeat className={cn(
-            "w-4 h-4 text-slate-500 transition-transform duration-500",
-            isClientMode ? "rotate-180" : "rotate-0"
-          )} />
-          {isClientMode ? 'Switch to Provider' : 'Switch to Client'}
-        </button>
-      </div>
       </aside>
     </>
   );

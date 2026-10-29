@@ -76,7 +76,7 @@ const MyBookings = () => {
     setLoadError('');
     const [mine, open, accepted] = await Promise.all([
       supabase.from('jobs').select(JOB_CARD_FIELDS).eq('client_id', user.id).order('created_at', { ascending: false }).limit(25),
-      supabase.from('jobs').select(JOB_CARD_FIELDS).is('provider_id', null).eq('availability_status', 'available').in('status', ['posted', 'matching']).order('created_at', { ascending: false }).limit(20),
+      supabase.from('jobs').select(JOB_CARD_FIELDS).is('provider_id', null).eq('availability_status', 'available').in('status', ['posted', 'matching']).neq('job_type', 'custom_build').order('created_at', { ascending: false }).limit(20),
       supabase.from('jobs').select(JOB_CARD_FIELDS).eq('provider_id', user.id).order('created_at', { ascending: false }).limit(25),
     ]);
     if (mine.error || open.error || accepted.error) {

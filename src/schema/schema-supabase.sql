@@ -349,6 +349,7 @@ create table if not exists public.auction_listings (
   ends_at timestamptz not null,
   status text not null default 'scheduled' check (status in ('scheduled', 'open', 'closed', 'cancelled')),
   anti_sniping_seconds integer not null default 120 check (anti_sniping_seconds >= 0),
+  media_url text,
   created_at timestamptz not null default now(),
   check (ends_at > starts_at)
 );

@@ -3,7 +3,7 @@ import { ArrowRight, Bell, Mail, Menu, Search } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 
-const Topbar = ({ fullName, isClientMode, onToggleMode, user, onOpenNav }) => {
+const Topbar = ({ fullName, user, onOpenNav }) => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [notifications, setNotifications] = useState([]);

@@ -95,7 +95,6 @@ const DashboardLayout = () => {
       <Sidebar
         fullName={profile?.full_name || 'Your account'}
         isClientMode={isClientMode}
-        onToggleMode={toggleMode}
         role={profile?.role}
         open={navOpen}
         onClose={() => setNavOpen(false)}
@@ -103,8 +102,6 @@ const DashboardLayout = () => {
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar
           fullName={profile?.full_name || 'Your account'}
-          isClientMode={isClientMode}
-          onToggleMode={toggleMode}
           user={user}
           onOpenNav={() => setNavOpen(true)}
         />

@@ -25,6 +25,23 @@ const CertificatesPage = () => {
   const [availableJobs, setAvailableJobs] = useState([]);
   const [mentors, setMentors] = useState([]);
 
+  // FR-27.1: compute SHA-256 hash of certificate metadata for blockchain anchoring.
+  async function computeCertHash(cert) {
+    const metadata = {
+      certificate_number: cert.certificate_number,
+      certificate_type: cert.certificate_type,
+      issued_at: cert.issued_at,
+      job_id: cert.job_id,
+      qr_payload: cert.qr_payload,
+      provenance: cert.provenance || {},
+    };
+    const encoder = new TextEncoder();
+    const data = encoder.encode(JSON.stringify(metadata));
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+  }
+
   const load = useCallback(async () => {
     if (!user) return;
     setLoading(true);
@@ -46,7 +63,7 @@ const CertificatesPage = () => {
     setAvailableJobs(jobRows || []);
     setMentors(mentorRows || []);
     setLoading(false);
-  }, [user, computeCertHash]);
+  }, [user]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -70,23 +87,6 @@ const CertificatesPage = () => {
     setIssuing(false);
     setJobIdForCert('');
     await load();
-  };
-
-  // FR-27.1: compute SHA-256 hash of certificate metadata for blockchain anchoring.
-  const computeCertHash = async (cert) => {
-    const metadata = {
-      certificate_number: cert.certificate_number,
-      certificate_type: cert.certificate_type,
-      issued_at: cert.issued_at,
-      job_id: cert.job_id,
-      qr_payload: cert.qr_payload,
-      provenance: cert.provenance || {},
-    };
-    const encoder = new TextEncoder();
-    const data = encoder.encode(JSON.stringify(metadata));
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
   };
 
   // FR-27.1: placeholder — blockchain platform selection is pending (SRS open issue).
