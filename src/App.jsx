@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Navigate, Routes, Route } from 'react-router-dom';
 import Home from './pages/Home';
+import AboutPage from './pages/AboutPage';
+import ContactPage from './pages/ContactPage';
+import FAQPage from './pages/FAQPage';
 import PlaceholderPage from './pages/PlaceholderPage';
 import LegalPage from './pages/LegalPage';
 import NotFound from './pages/NotFound';
@@ -106,15 +109,15 @@ function App() {
         <Route element={<PublicLayout />}>
           <Route path="/" element={<Home />} />
           <Route path="/search" element={<SearchResults />} />
-          <Route path="/about" element={<PlaceholderPage title="About Us" />} />
+          <Route path="/about" element={<AboutPage />} />
           <Route path="/careers" element={<PlaceholderPage title="Careers" />} />
           <Route path="/blog" element={<PlaceholderPage title="Blog" />} />
-          <Route path="/contact" element={<PlaceholderPage title="Contact" />} />
+          <Route path="/contact" element={<ContactPage />} />
           <Route path="/services/handyman" element={<ServiceLandingPage serviceId="handyman" />} />
           <Route path="/services/artisans" element={<ServiceLandingPage serviceId="artisans" />} />
           <Route path="/services/heavy-haulage" element={<ServiceLandingPage serviceId="heavy-haulage" />} />
           <Route path="/services/equipment" element={<ServiceLandingPage serviceId="equipment" />} />
-          <Route path="/faq" element={<PlaceholderPage title="FAQ" />} />
+          <Route path="/faq" element={<FAQPage />} />
           <Route path="/help-center" element={<PlaceholderPage title="Help Center" />} />
           <Route path="/terms" element={<LegalPage type="terms" />} />
           <Route path="/terms-and-conditions" element={<LegalPage type="terms" />} />

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, BadgeCheck, MapPinned, ShieldCheck, Truck } from 'lucide-react';
+import { ArrowRight, BadgeCheck, MapPinned, ShieldCheck } from 'lucide-react';
 import { Button } from '../components/Button';
 import { cn } from '../lib/utils';
 
@@ -46,10 +46,7 @@ const Hero = () => {
         <div className="flex flex-col items-center gap-12 lg:flex-row lg:items-center lg:gap-16">
           {/* Copy */}
           <div className="w-full lg:w-1/2">
-            <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-1.5 text-xs font-bold uppercase tracking-[0.2em] text-emerald-300 backdrop-blur">
-              <Truck className="h-3.5 w-3.5" /> Local skills · Heavy equipment
-            </span>
-            <h1 className="mt-6 min-h-[160px] text-4xl font-extrabold leading-[1.15] tracking-tight text-white md:min-h-[190px] md:text-5xl lg:min-h-[210px] lg:text-6xl">
+            <h1 className="min-h-[160px] text-4xl font-extrabold leading-[1.15] tracking-tight text-white md:min-h-[190px] md:text-5xl lg:min-h-[210px] lg:text-6xl">
               <span className="block">Find</span>
               <span
                 className={cn(

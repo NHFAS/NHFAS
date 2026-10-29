@@ -15,10 +15,28 @@ const serviceContent = {
   artisans: {
     eyebrow: 'Local skills and craftsmanship',
     title: 'Skilled artisans',
-    description: 'Connect with local makers for custom furniture, woodwork, tailoring, crafts, and specialist projects.',
+    description: 'Find independent craftspeople and skilled makers for practical, decorative, and made-to-order work. Share what you want created or repaired, your preferred materials and dimensions, where the work is needed, and when you need it. Providers can assess the request, discuss details, and offer a quote for a custom project.',
     search: 'artisan',
     icon: CheckCircle2,
     items: ['Custom furniture and woodwork', 'Tailoring and crafts', 'Made-to-order projects'],
+    examples: [
+      {
+        title: 'Furniture and carpentry',
+        description: 'Request custom tables, chairs, shelves, cabinets, doors, repairs, or other woodwork. Include measurements, materials, finish preferences, and reference photos when available.',
+      },
+      {
+        title: 'Textiles, tailoring, and crafts',
+        description: 'Describe a made-to-measure garment, alteration, woven item, decorative craft, or other specialist piece. Share fabric preferences, sizing, quantity, and any design references.',
+      },
+      {
+        title: 'Artwork and custom commissions',
+        description: 'Explain the subject, style, size, materials, intended use, and delivery needs for a piece of art or a one-of-a-kind commission. Agree on the scope and stages with the provider before work begins.',
+      },
+      {
+        title: 'Fabrication and specialist projects',
+        description: 'For custom fabrication or detailed trade work, describe the intended result, site conditions, materials, dimensions, and any installation requirements so providers can prepare an informed proposal.',
+      },
+    ],
   },
   'heavy-haulage': {
     eyebrow: 'Freight and equipment movement',
@@ -82,6 +100,26 @@ const ServiceLandingPage = ({ serviceId }) => {
           ))}
         </div>
       </section>
+
+      {service.examples && (
+        <section aria-labelledby="service-examples-heading">
+          <div className="mb-5">
+            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-400">Examples of artisan work</p>
+            <h2 id="service-examples-heading" className="mt-1 text-2xl font-bold text-brand-navy">Describe the result you have in mind</h2>
+            <p className="mt-3 max-w-3xl leading-relaxed text-slate-600">
+              Custom work varies from one project to another. A detailed request helps an artisan understand the materials, design, size, location, and finish you expect, then decide whether to accept the work or provide a quote.
+            </p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {service.examples.map((example) => (
+              <article key={example.title} className="rounded-xl border border-slate-200 bg-white p-5">
+                <h3 className="font-semibold text-brand-navy">{example.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-slate-600">{example.description}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="grid gap-4 rounded-xl border border-emerald-100 bg-emerald-50 p-6 sm:grid-cols-[auto_1fr_auto] sm:items-center">
         <ShieldCheck className="h-8 w-8 text-emerald-700" aria-hidden="true" />
