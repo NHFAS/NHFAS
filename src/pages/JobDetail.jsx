@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { AlertCircle, ArrowLeft, CheckCircle2, FileText, LoaderCircle, Siren, Star, Upload } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, FileText, LoaderCircle, Navigation, Siren, Star, Upload } from 'lucide-react';
 import { Link, useNavigate, useOutletContext, useParams } from 'react-router-dom';
 import { Button } from '../components/Button';
 import { supabase } from '../lib/supabase';
@@ -22,6 +22,51 @@ const permitStatusClasses = {
   approved: 'border-emerald-200 bg-emerald-50 text-emerald-700',
   rejected: 'border-red-200 bg-red-50 text-red-700',
   expired: 'border-slate-200 bg-slate-100 text-slate-600',
+};
+
+// --- FR-21 Route optimization helpers ---
+
+const toRad = (deg) => (deg * Math.PI) / 180;
+const haversineKm = ([lat1, lon1], [lat2, lon2]) => {
+  const R = 6371;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+};
+
+const geoCache = new Map();
+const geocodeAddress = async (address) => {
+  if (!address) return null;
+  if (geoCache.has(address)) return geoCache.get(address);
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(address)}`,
+      { headers: { Accept: 'application/json', 'Accept-Language': 'en' } },
+    );
+    const rows = await response.json();
+    const loc = rows?.[0] ? { lat: Number(rows[0].lat), lon: Number(rows[0].lon) } : null;
+    geoCache.set(address, loc);
+    return loc;
+  } catch {
+    geoCache.set(address, null);
+    return null;
+  }
+};
+
+// Permutation-based TSP (feasible for up to ~8 stops).
+const permute = (items) => {
+  const results = [];
+  const go = (arr, m = []) => {
+    if (arr.length === 0) { results.push(m); return; }
+    for (let i = 0; i < arr.length; i++) {
+      const curr = arr.slice();
+      const next = curr.splice(i, 1);
+      go(curr.slice(), m.concat(next));
+    }
+  };
+  go(items);
+  return results;
 };
 
 const JobDetail = () => {
@@ -47,6 +92,12 @@ const JobDetail = () => {
   const [latestIncident, setLatestIncident] = useState(null);
   const [quotes, setQuotes] = useState([]);
   const [acceptingQuote, setAcceptingQuote] = useState(false);
+  const [optimizing, setOptimizing] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const [optimizedRoute, setOptimizedRoute] = useState(null);
+  const [currentDistance, setCurrentDistance] = useState(0);
+  const [distanceSaved, setDistanceSaved] = useState(0);
+  const [routeError, setRouteError] = useState('');
   const load = useCallback(async () => {
     if (!user) return;
     setIsLoading(true);
@@ -204,6 +255,93 @@ const JobDetail = () => {
     setWorking(false);
   };
 
+  // FR-21: Optimize stop order using permutation-based TSP.
+  const optimizeRoute = async () => {
+    setOptimizing(true);
+    setRouteError('');
+    setOptimizedRoute(null);
+    setCurrentDistance(0);
+    setDistanceSaved(0);
+    try {
+      if (stops.length > 8) {
+        setRouteError('Route optimization supports up to 8 stops.');
+        setOptimizing(false);
+        return;
+      }
+      // Geocode all stop addresses.
+      const geocoded = await Promise.all(
+        stops.map(async (stop) => ({ stop, loc: await geocodeAddress(stop.address) })),
+      );
+      const unGeo = geocoded.filter((g) => !g.loc);
+      if (unGeo.length > 0) {
+        setRouteError(`Could not geocode: ${unGeo.map((g) => g.stop.address).join(', ')}`);
+        setOptimizing(false);
+        return;
+      }
+
+      // Current order distance.
+      let currentDist = 0;
+      for (let i = 0; i < geocoded.length - 1; i++) {
+        currentDist += haversineKm(
+          [geocoded[i].loc.lat, geocoded[i].loc.lon],
+          [geocoded[i + 1].loc.lat, geocoded[i + 1].loc.lon],
+        );
+      }
+      setCurrentDistance(currentDist);
+
+      // Try all permutations (fix first stop as pickup).
+      const first = geocoded[0];
+      const rest = geocoded.slice(1);
+      const perms = permute(rest);
+      let bestDist = Infinity;
+      let bestOrder = [];
+      for (const p of perms) {
+        const order = [first, ...p];
+        let d = 0;
+        for (let i = 0; i < order.length - 1; i++) {
+          d += haversineKm(
+            [order[i].loc.lat, order[i].loc.lon],
+            [order[i + 1].loc.lat, order[i + 1].loc.lon],
+          );
+        }
+        if (d < bestDist) {
+          bestDist = d;
+          bestOrder = order;
+        }
+      }
+
+      const saved = Math.max(0, currentDist - bestDist);
+      setDistanceSaved(saved);
+      setOptimizedRoute(
+        bestOrder.map((g, idx) => ({ stop_id: g.stop.id, address: g.stop.address, order: idx + 1 })),
+      );
+    } catch (err) {
+      setRouteError(err?.message || 'Route optimization failed.');
+    } finally {
+      setOptimizing(false);
+    }
+  };
+
+  // FR-21: Persist optimized stop order to the database.
+  const applyOptimizedRoute = async () => {
+    if (!optimizedRoute) return;
+    setApplying(true);
+    try {
+      const updates = optimizedRoute.map((seq, idx) =>
+        supabase.from('job_stops').update({ stop_order: idx + 1 }).eq('id', seq.stop_id),
+      );
+      await Promise.all(updates);
+      setFlash('Stop order updated. Route optimized.');
+      setOptimizedRoute(null);
+      setDistanceSaved(0);
+      await load();
+    } catch (err) {
+      setActionError(err?.message || 'Failed to apply optimized route.');
+    } finally {
+      setApplying(false);
+    }
+  };
+
   const submitSos = async () => {
     if (!window.confirm('Trigger an emergency SOS? Platform safety staff will be alerted with your location.')) return;
     setWorking(true);
@@ -228,6 +366,13 @@ const JobDetail = () => {
     });
     setWorking(false);
     if (sosError) { setActionError(sosError.message); return; }
+    // FR-25.3: freeze escrow funds while the incident is investigated.
+    try {
+      await supabase.rpc('freeze_escrow', { target_job_id: jobId });
+    } catch (freezeErr) {
+      // Non-fatal: escrow may not exist or already be frozen.
+      setFlash('SOS sent. ' + (freezeErr.message || 'Escrow freeze could not be applied.'));
+    }
     // FR-25: alert every administrator account, not just the incident row.
     const { data: adminRows } = await supabase.from('profiles').select('id').eq('role', 'admin');
     if (adminRows && adminRows.length) {
@@ -611,6 +756,80 @@ const openQuotes = quotes.filter((q) => q.status === 'submitted');
             </section>
           )}
         </div>
+
+        {/* FR-21: Route optimization for multi-stop haulage jobs */}
+        {job.job_type === 'haulage' && stops.length >= 3 && (
+          <section aria-label="Route optimizer" className="mt-6 rounded-lg border border-slate-200 bg-white p-5 sm:p-7">
+            <h2 className="text-lg font-bold text-brand-navy flex items-center gap-2">
+              <Navigation className="h-4 w-4" aria-hidden="true" />
+              Route optimizer
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Reordering stops can reduce total distance. The optimizer compares all
+              possible stop sequences and recommends the shortest route.
+            </p>
+            <div className="mt-4 space-y-4">
+              <div className="rounded-lg border border-slate-200 p-3">
+                <p className="text-sm font-medium text-slate-700">Current stop order</p>
+                <ol className="mt-2 space-y-1 text-sm text-slate-600">
+                  {stops.map((stop, i) => (
+                    <li key={stop.id} className="flex items-center gap-2">
+                      <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-slate-100 text-slate-500 text-xs font-bold">
+                        {stop.stop_order}
+                      </span>
+                      <span className="font-medium">{stop.address}</span>
+                      {stop.stop_type && <span className="ml-1 text-[10px] text-slate-400 uppercase">({stop.stop_type})</span>}
+                    </li>
+                  ))}
+                </ol>
+              </div>
+              <div className="mt-4 flex items-center gap-3">
+                <Button
+                  onClick={optimizeRoute}
+                  disabled={optimizing}
+                  className="gap-2"
+                >
+                  {optimizing ? <LoaderCircle size={14} className="animate-spin" /> : <Navigation size={14} />}
+                  {optimizing ? 'Optimizing...' : 'Optimize route order'}
+                </Button>
+                {optimizedRoute && distanceSaved > 0 && (
+                  <span className="text-sm font-semibold text-emerald-700">
+                    Save {distanceSaved.toFixed(1)} km ({((distanceSaved / currentDistance) * 100).toFixed(0)}% shorter)
+                  </span>
+                )}
+                {optimizedRoute && distanceSaved > 0 && (
+                  <Button
+                    onClick={applyOptimizedRoute}
+                    disabled={applying}
+                    variant="outline"
+                    className="gap-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                  >
+                    {applying ? <LoaderCircle size={14} className="animate-spin" /> : <ArrowRight size={14} />}
+                    {applying ? 'Applying...' : 'Apply optimized order'}
+                  </Button>
+                )}
+              </div>
+              {optimizedRoute && optimizedRoute.length > 0 && (
+                <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50 p-3">
+                  <p className="text-xs font-medium text-slate-700">Recommended stop order</p>
+                  <ol className="mt-2 space-y-1 text-sm text-slate-600">
+                    {optimizedRoute.map((seq, i) => (
+                      <li key={seq.stop_id} className="flex items-center gap-2">
+                        <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold">
+                          {i + 1}
+                        </span>
+                        <span className="font-medium">{seq.address}</span>
+                      </li>
+                      ))}
+                  </ol>
+                </div>
+              )}
+              {routeError && (
+                <p role="alert" className="mt-2 rounded-lg border border-red-200 bg-red-50 p-2 text-sm text-red-700">{routeError}</p>
+              )}
+            </div>
+          </section>
+        )}
       </div>
     </div>
   );

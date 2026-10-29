@@ -468,7 +468,7 @@ create table if not exists public.escrow_accounts (
   currency char(3) not null default 'ETB',
   funded_amount numeric(14,2) not null default 0 check (funded_amount >= 0),
   released_amount numeric(14,2) not null default 0 check (released_amount >= 0),
-  status text not null default 'pending' check (status in ('pending', 'funded', 'partially_released', 'released', 'refunded', 'disputed')),
+  status text not null default 'pending' check (status in ('pending', 'funded', 'partially_released', 'released', 'refunded', 'disputed', 'frozen')),
   created_at timestamptz not null default now(),
   check (released_amount <= funded_amount)
 );
@@ -1836,6 +1836,60 @@ end;
 $$;
 
 grant execute on function public.close_auction(uuid) to authenticated;
+
+-- SRS FR-25.3: freeze escrow when an SOS or safety incident is filed.
+create or replace function public.freeze_escrow(target_job_id uuid) returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  escrow_row record;
+begin
+  select * into escrow_row
+  from public.escrow_accounts
+  where job_id = target_job_id;
+
+  if not found then
+    raise exception 'No escrow account found for this job.';
+  end if;
+
+  if escrow_row.status = 'frozen' then
+    raise exception 'Escrow is already frozen.';
+  end if;
+
+  if escrow_row.status not in ('funded', 'partially_released') then
+    raise exception 'Cannot freeze escrow in status %.', escrow_row.status;
+  end if;
+
+  update public.escrow_accounts
+  set status = 'frozen'
+  where job_id = target_job_id;
+
+  -- Notify both parties
+  insert into public.notifications (user_id, title, body, notification_type, data)
+  values (
+    escrow_row.payer_id,
+    'Escrow frozen — safety incident',
+    format('Escrow for job has been frozen due to a reported safety incident. Funds will remain held until the incident is resolved.', escrow_row.job_id),
+    'in_app',
+    jsonb_build_object('related_id', target_job_id, 'type', 'escrow_frozen')
+  );
+
+  if escrow_row.payee_id is not null then
+    insert into public.notifications (user_id, title, body, notification_type, data)
+    values (
+      escrow_row.payee_id,
+      'Escrow frozen — safety incident',
+      format('Escrow for job has been frozen due to a reported safety incident. Funds will remain held until the incident is resolved.', escrow_row.job_id),
+      'in_app',
+      jsonb_build_object('related_id', target_job_id, 'type', 'escrow_frozen')
+    );
+  end if;
+end;
+$$;
+
+grant execute on function public.freeze_escrow(uuid) to authenticated;
 
 -- ---------------------------------------------------------------------
 -- SRS FR-01: Admin user management.
